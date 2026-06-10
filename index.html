@@ -3,299 +3,1104 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Enterprise Property Management</title>
-    <!-- Bootstrap 5 & Icons -->
+    <title>Enterprise Property & Tenant Management System</title>
+    
+    <!-- Bootstrap 5.3.2 CSS CDN -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Bootstrap Icons CDN -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    <!-- Chart.js -->
+    
+    <!-- Chart.js CDN -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <!-- PDF & Excel Export -->
+    
+    <!-- PDF Export & SheetJS (Excel) CDNs -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+    <!-- App-Specific Embedded Style Shell (Strictly inline to prevent external file creation) -->
     <style>
-        /* Minimal layout overrides using standard CSS properties */
-        body { overflow-x: hidden; background-color: #f8f9fa; }
-        .sidebar { width: 250px; height: 100vh; position: fixed; top: 0; left: 0; z-index: 1040; transition: transform 0.3s ease; }
-        .main-content { margin-left: 250px; transition: margin-left 0.3s ease; min-height: 100vh; }
-        @media (max-width: 768px) {
-            .sidebar { transform: translateX(-100%); }
-            .sidebar.show { transform: translateX(0); }
-            .main-content { margin-left: 0; }
+        :root {
+            --transition-speed: 0.3s;
+            --sidebar-width: 270px;
         }
-        .nav-link { color: #cbd5e1; border-radius: 0.375rem; margin-bottom: 0.25rem; }
-        .nav-link:hover, .nav-link.active { background-color: #334155; color: white; }
-        .profile-img-preview { width: 100px; height: 100px; object-fit: cover; border-radius: 50%; border: 2px solid #dee2e6; }
-        .doc-indicator { width: 15px; height: 15px; border-radius: 50%; display: inline-block; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background-color: #f8fafc;
+            overflow-x: hidden;
+        }
+
+        /* Sidebar Styling */
+        .sidebar {
+            width: var(--sidebar-width);
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            z-index: 1040;
+            background-color: #0f172a;
+            color: #f1f5f9;
+            transition: transform var(--transition-speed) ease;
+        }
+
+        .sidebar .nav-link {
+            color: #94a3b8;
+            padding: 12px 20px;
+            margin: 4px 12px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .sidebar .nav-link:hover, 
+        .sidebar .nav-link.active {
+            background-color: #1e293b;
+            color: #f8fafc !important;
+        }
+
+        .sidebar .nav-link.active {
+            background-color: #2563eb;
+        }
+
+        /* Main Workspace Panel */
+        .main-panel {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+            display: flex;
+            flex-column: column;
+            transition: margin-left var(--transition-speed) ease;
+        }
+
+        @media (max-width: 992px) {
+            .sidebar {
+                transform: translateX(-100%);
+            }
+            .sidebar.active {
+                transform: translateX(0);
+            }
+            .main-panel {
+                margin-left: 0;
+            }
+        }
+
+        /* Utility Layouts */
+        .card-stat {
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            cursor: pointer;
+        }
+
+        .card-stat:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        .profile-photo-circle {
+            width: 110px;
+            height: 110px;
+            object-fit: cover;
+            border-radius: 50%;
+            border: 3px solid #e2e8f0;
+        }
+
+        .timeline-item {
+            position: relative;
+            padding-left: 24px;
+            border-left: 2px solid #e2e8f0;
+            margin-bottom: 16px;
+        }
+
+        .timeline-item::before {
+            content: "";
+            position: absolute;
+            left: -6px;
+            top: 4px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #2563eb;
+        }
+
+        /* Print Media Definitions */
+        @media print {
+            .sidebar, .navbar, .btn, .modal-footer {
+                display: none !important;
+            }
+            .main-panel {
+                margin-left: 0 !important;
+                padding: 0 !important;
+            }
+            .printable-section {
+                display: block !important;
+            }
+        }
     </style>
 </head>
 <body>
 
-    <!-- Sidebar Navigation -->
-    <aside class="sidebar bg-dark text-white p-3 d-flex flex-column" id="sidebar">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <h4 class="m-0 text-white fw-bold"><i class="bi bi-buildings me-2"></i>PropManager</h4>
-            <button class="btn btn-sm btn-outline-light d-md-none" onclick="document.getElementById('sidebar').classList.remove('show')"><i class="bi bi-x-lg"></i></button>
+    <!-- ========================================================================= -->
+    <!-- PRIMARY NAVIGATION SIDEBAR                                                -->
+    <!-- ========================================================================= -->
+    <aside class="sidebar d-flex flex-column" id="sidebar">
+        <div class="p-4 d-flex align-items-center justify-content-between border-bottom border-secondary">
+            <span class="fs-4 fw-bold text-white d-flex align-items-center gap-2">
+                <i class="bi bi-buildings-fill text-primary"></i> PropManager Pro
+            </span>
+            <button class="btn btn-sm btn-outline-light d-lg-none" onclick="document.getElementById('sidebar').classList.remove('active')">
+                <i class="bi bi-x-lg"></i>
+            </button>
         </div>
-        <ul class="nav flex-column mb-auto nav-pills">
-            <li class="nav-item"><a href="#" class="nav-link active" data-target="dashboard"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a></li>
-            <li class="nav-item"><a href="#" class="nav-link" data-target="rooms"><i class="bi bi-door-open me-2"></i>Rooms</a></li>
-            <li class="nav-item"><a href="#" class="nav-link" data-target="tenants"><i class="bi bi-people me-2"></i>Tenants</a></li>
-            <li class="nav-item"><a href="#" class="nav-link" data-target="rent"><i class="bi bi-cash-coin me-2"></i>Rent Collection</a></li>
-            <li class="nav-item"><a href="#" class="nav-link" data-target="electricity"><i class="bi bi-lightning-charge me-2"></i>Electricity</a></li>
-            <li class="nav-item"><a href="#" class="nav-link" data-target="reports"><i class="bi bi-graph-up me-2"></i>Reports</a></li>
-            <li class="nav-item"><a href="#" class="nav-link" data-target="settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
-        </ul>
-        <div class="mt-auto border-top pt-3 border-secondary">
-            <div class="d-flex align-items-center">
-                <i class="bi bi-person-circle fs-3 me-2"></i>
+        
+        <div class="flex-grow-1 overflow-y-auto pt-3">
+            <ul class="nav flex-column mb-auto">
+                <li class="nav-item">
+                    <a href="#" class="nav-link active" data-view="dashboard">
+                        <i class="bi bi-grid-1x2-fill"></i> Dashboard
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="rooms">
+                        <i class="bi bi-door-closed-fill"></i> Rooms
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="tenants">
+                        <i class="bi bi-people-fill"></i> Tenants
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="rent">
+                        <i class="bi bi-credit-card-fill"></i> Rent Collection
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="electricity">
+                        <i class="bi bi-lightning-charge-fill"></i> Electricity Bills
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="documents">
+                        <i class="bi bi-file-earmark-lock2-fill"></i> Documents
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="alerts">
+                        <i class="bi bi-exclamation-triangle-fill"></i> Alerts
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="history">
+                        <i class="bi bi-clock-history"></i> History
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="reports">
+                        <i class="bi bi-graph-up-arrow"></i> Reports
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a href="#" class="nav-link" data-view="settings">
+                        <i class="bi bi-gear-fill"></i> Settings
+                    </a>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="p-3 border-top border-secondary bg-dark">
+            <div class="d-flex align-items-center gap-3">
+                <div class="avatar bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 40px; height: 40px;">
+                    <i class="bi bi-person-fill"></i>
+                </div>
                 <div>
-                    <h6 class="m-0 text-white">Admin</h6>
-                    <small class="text-secondary">Property Owner</small>
+                    <p class="m-0 text-white fw-semibold small">Property Admin</p>
+                    <p class="m-0 text-muted" style="font-size: 11px;">Owner Account</p>
                 </div>
             </div>
         </div>
     </aside>
 
-    <!-- Main Content Area -->
-    <main class="main-content">
-        <!-- Topbar -->
-        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top px-3">
-            <button class="btn btn-light d-md-none me-2" onclick="document.getElementById('sidebar').classList.add('show')">
-                <i class="bi bi-list fs-4"></i>
+    <!-- ========================================================================= -->
+    <!-- MAIN WORKSPACE CONTAINER                                                  -->
+    <!-- ========================================================================= -->
+    <div class="main-panel">
+        
+        <!-- Top Sticky Header -->
+        <header class="navbar navbar-expand-lg navbar-light bg-white border-bottom px-4 py-2 sticky-top shadow-sm">
+            <button class="btn btn-outline-dark d-lg-none me-3" id="sidebar-toggle" onclick="document.getElementById('sidebar').classList.add('active')">
+                <i class="bi bi-list fs-5"></i>
             </button>
-            <h5 class="my-auto d-none d-md-block" id="topbar-title">Dashboard</h5>
-            <div class="ms-auto d-flex align-items-center gap-3">
-                <div class="position-relative">
-                    <i class="bi bi-bell fs-5 cursor-pointer" onclick="new bootstrap.Modal(document.getElementById('alertsModal')).show()"></i>
-                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="alert-badge">0</span>
-                </div>
-                <button class="btn btn-outline-secondary btn-sm" id="btn-theme-toggle"><i class="bi bi-moon"></i></button>
-            </div>
-        </nav>
-
-        <div class="container-fluid p-4" id="app-container">
+            <h4 class="my-auto fw-bold text-dark" id="page-header-title">Dashboard View</h4>
             
-            <!-- VIEW: DASHBOARD -->
-            <div id="view-dashboard" class="app-view">
-                <div class="row g-3 mb-4">
-                    <div class="col-12 col-md-3"><div class="card bg-primary text-white h-100"><div class="card-body"><h6>Total Rooms</h6><h2 id="dash-rooms">0</h2></div></div></div>
-                    <div class="col-12 col-md-3"><div class="card bg-success text-white h-100"><div class="card-body"><h6>Occupied</h6><h2 id="dash-occupied">0</h2></div></div></div>
-                    <div class="col-12 col-md-3"><div class="card bg-info text-white h-100"><div class="card-body"><h6>Active Tenants</h6><h2 id="dash-tenants">0</h2></div></div></div>
-                    <div class="col-12 col-md-3"><div class="card bg-warning text-dark h-100"><div class="card-body"><h6>Rent Pending</h6><h2 id="dash-rent-pending">₹0</h2></div></div></div>
+            <div class="ms-auto d-flex align-items-center gap-3">
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary position-relative px-2 py-1 rounded-3" data-bs-toggle="dropdown">
+                        <i class="bi bi-bell-fill"></i>
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="header-alert-count">0</span>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow border-0 mt-2 p-0" style="width: 300px;" id="header-alert-list">
+                        <li class="p-2 border-bottom text-center"><small class="fw-bold">Notifications</small></li>
+                        <li class="p-3 text-center text-muted"><small>No critical alerts active</small></li>
+                    </ul>
                 </div>
+                <button class="btn btn-outline-dark rounded-3 px-2 py-1" id="theme-toggler">
+                    <i class="bi bi-moon-stars-fill"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- View Display Area -->
+        <main class="container-fluid p-4" id="view-port">
+
+            <!-- ================================================================= -->
+            <!-- VIEW: DASHBOARD                                                   -->
+            <!-- ================================================================= -->
+            <section id="view-dashboard" class="app-view">
+                <!-- Dashboard Stat Matrix -->
                 <div class="row g-3 mb-4">
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="card card-stat border-0 border-start border-primary border-4 shadow-sm p-3 bg-white">
+                            <span class="text-muted small fw-semibold">Total Rooms</span>
+                            <h3 class="m-0 fw-bold text-dark mt-1" id="dash-total-rooms">0</h3>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="card card-stat border-0 border-start border-success border-4 shadow-sm p-3 bg-white">
+                            <span class="text-muted small fw-semibold">Occupied Rooms</span>
+                            <h3 class="m-0 fw-bold text-success mt-1" id="dash-occupied-rooms">0</h3>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="card card-stat border-0 border-start border-info border-4 shadow-sm p-3 bg-white">
+                            <span class="text-muted small fw-semibold">Vacant Rooms</span>
+                            <h3 class="m-0 fw-bold text-info mt-1" id="dash-vacant-rooms">0</h3>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="card card-stat border-0 border-start border-warning border-4 shadow-sm p-3 bg-white">
+                            <span class="text-muted small fw-semibold">Maintenance</span>
+                            <h3 class="m-0 fw-bold text-warning mt-1" id="dash-maintenance-rooms">0</h3>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="card card-stat border-0 border-start border-dark border-4 shadow-sm p-3 bg-white">
+                            <span class="text-muted small fw-semibold">Active Tenants</span>
+                            <h3 class="m-0 fw-bold text-dark mt-1" id="dash-active-tenants">0</h3>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-4 col-xl-2">
+                        <div class="card card-stat border-0 border-start border-danger border-4 shadow-sm p-3 bg-white">
+                            <span class="text-muted small fw-semibold">Pending Rent</span>
+                            <h3 class="m-0 fw-bold text-danger mt-1" id="dash-rent-pending">0</h3>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Secondary Stat Matrix -->
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <div class="card p-3 border-0 bg-white shadow-sm d-flex flex-row align-items-center justify-content-between">
+                            <div><span class="text-muted small">Electricity Pending</span><h5 class="fw-bold m-0" id="dash-elec-pending">0</h5></div>
+                            <div class="bg-warning bg-opacity-10 p-2 rounded-circle text-warning"><i class="bi bi-lightning-charge-fill"></i></div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <div class="card p-3 border-0 bg-white shadow-sm d-flex flex-row align-items-center justify-content-between">
+                            <div><span class="text-muted small">Missing Documents</span><h5 class="fw-bold m-0" id="dash-missing-docs">0</h5></div>
+                            <div class="bg-danger bg-opacity-10 p-2 rounded-circle text-danger"><i class="bi bi-file-earmark-x-fill"></i></div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <div class="card p-3 border-0 bg-white shadow-sm d-flex flex-row align-items-center justify-content-between">
+                            <div><span class="text-muted small">Deposits Collected</span><h5 class="fw-bold m-0" id="dash-deposits-held">₹0</h5></div>
+                            <div class="bg-success bg-opacity-10 p-2 rounded-circle text-success"><i class="bi bi-safe2-fill"></i></div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-6 col-lg-3">
+                        <div class="card p-3 border-0 bg-white shadow-sm d-flex flex-row align-items-center justify-content-between">
+                            <div><span class="text-muted small">Monthly Net Income</span><h5 class="fw-bold m-0" id="dash-monthly-income">₹0</h5></div>
+                            <div class="bg-primary bg-opacity-10 p-2 rounded-circle text-primary"><i class="bi bi-graph-up-arrow"></i></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Visualization Row -->
+                <div class="row g-4 mb-4">
                     <div class="col-12 col-lg-8">
-                        <div class="card shadow-sm"><div class="card-body"><canvas id="chartRent" height="100"></canvas></div></div>
+                        <div class="card border-0 shadow-sm p-3 bg-white h-100">
+                            <h6 class="fw-bold mb-3 text-dark">Monthly Revenue Collection & Rent Ledger</h6>
+                            <div style="height: 280px; position: relative;"><canvas id="chartRentCollection"></canvas></div>
+                        </div>
                     </div>
                     <div class="col-12 col-lg-4">
-                        <div class="card shadow-sm"><div class="card-body"><canvas id="chartOccupancy" height="200"></canvas></div></div>
+                        <div class="card border-0 shadow-sm p-3 bg-white h-100">
+                            <h6 class="fw-bold mb-3 text-dark">Property Occupancy Distribution</h6>
+                            <div style="height: 280px; position: relative;"><canvas id="chartOccupancyDistribution"></canvas></div>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- VIEW: ROOMS -->
-            <div id="view-rooms" class="app-view d-none">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <input type="text" class="form-control w-25" id="search-rooms" placeholder="Search Rooms...">
-                    <button class="btn btn-primary" onclick="openRoomModal()"><i class="bi bi-plus-lg"></i> Add Room</button>
-                </div>
-                <div class="card shadow-sm">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="table-light">
-                                <tr><th>No.</th><th>Type</th><th>Floor</th><th>Rent</th><th>Max Occ.</th><th>Status</th><th>Actions</th></tr>
-                            </thead>
-                            <tbody id="table-rooms"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- VIEW: TENANTS -->
-            <div id="view-tenants" class="app-view d-none">
-                <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
-                    <input type="text" class="form-control" style="max-width:300px;" id="search-tenants" placeholder="Search by Name/Phone...">
-                    <button class="btn btn-primary" onclick="openTenantModal()"><i class="bi bi-person-plus"></i> Add Tenant</button>
-                </div>
-                <div class="card shadow-sm">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="table-light">
-                                <tr><th>Photo</th><th>Name</th><th>Room</th><th>Phone</th><th>Docs %</th><th>Status</th><th>Actions</th></tr>
-                            </thead>
-                            <tbody id="table-tenants"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- VIEW: RENT COLLECTION -->
-            <div id="view-rent" class="app-view d-none">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <input type="month" class="form-control w-25" id="filter-rent-month">
-                    <button class="btn btn-success" onclick="openRentModal()"><i class="bi bi-cash"></i> Collect Rent</button>
-                </div>
-                <div class="card shadow-sm">
-                    <div class="table-responsive">
-                        <table class="table table-hover align-middle mb-0">
-                            <thead class="table-light">
-                                <tr><th>Date</th><th>Tenant</th><th>Room</th><th>Amount</th><th>Mode</th><th>Status</th><th>Actions</th></tr>
-                            </thead>
-                            <tbody id="table-rent"></tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-
-            <!-- VIEW: REPORTS & EXPORTS -->
-            <div id="view-reports" class="app-view d-none">
+                <!-- Dashboard Action Center -->
                 <div class="row g-4">
-                    <div class="col-md-4">
-                        <div class="card h-100 shadow-sm text-center p-4">
-                            <i class="bi bi-file-earmark-spreadsheet text-success" style="font-size: 3rem;"></i>
-                            <h5 class="mt-3">Tenant Master Report</h5>
-                            <button class="btn btn-outline-success mt-2" onclick="exportData('tenants', 'excel')">Export Excel</button>
+                    <div class="col-12 col-md-6">
+                        <div class="card border-0 p-3 shadow-sm bg-white h-100">
+                            <h6 class="fw-bold mb-3 text-dark"><i class="bi bi-lightning-fill text-warning"></i> Quick Action Command Panel</h6>
+                            <div class="d-flex flex-wrap gap-2">
+                                <button class="btn btn-primary d-flex align-items-center gap-2" onclick="openRoomModal()"><i class="bi bi-plus-circle"></i> Add Room</button>
+                                <button class="btn btn-outline-dark d-flex align-items-center gap-2" onclick="openTenantModal()"><i class="bi bi-person-plus"></i> Add Tenant</button>
+                                <button class="btn btn-success d-flex align-items-center gap-2" onclick="openRentModal()"><i class="bi bi-wallet2"></i> Record Rent</button>
+                                <button class="btn btn-warning text-dark d-flex align-items-center gap-2" onclick="openElecModal()"><i class="bi bi-lightning-charge"></i> Record Meter</button>
+                            </div>
                         </div>
                     </div>
-                    <div class="col-md-4">
-                        <div class="card h-100 shadow-sm text-center p-4">
-                            <i class="bi bi-file-earmark-pdf text-danger" style="font-size: 3rem;"></i>
-                            <h5 class="mt-3">Rent Collection Report</h5>
-                            <button class="btn btn-outline-danger mt-2" onclick="exportData('rent', 'pdf')">Export PDF</button>
-                        </div>
-                    </div>
-                    <div class="col-md-4">
-                        <div class="card h-100 shadow-sm text-center p-4">
-                            <i class="bi bi-database-down text-primary" style="font-size: 3rem;"></i>
-                            <h5 class="mt-3">System Backup</h5>
-                            <button class="btn btn-outline-primary mt-2" onclick="exportBackupJSON()">Download JSON Backup</button>
+                    <div class="col-12 col-md-6">
+                        <div class="card border-0 p-3 shadow-sm bg-white h-100">
+                            <h6 class="fw-bold mb-3 text-dark"><i class="bi bi-activity text-primary"></i> Property Event Stream</h6>
+                            <div id="recent-activity-container" class="overflow-y-auto" style="max-height: 140px;">
+                                <div class="text-center text-muted py-4"><small>No actions tracked in active session.</small></div>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
-            
-            <!-- Other views initialized as empty skeletons -->
-            <div id="view-electricity" class="app-view d-none"><h5>Electricity Module - Coming Soon</h5></div>
-            <div id="view-settings" class="app-view d-none"><h5>Settings Module - System initialized.</h5></div>
+            </section>
 
-        </div>
-    </main>
+            <!-- ================================================================= -->
+            <!-- VIEW: ROOMS                                                       -->
+            <!-- ================================================================= -->
+            <section id="view-rooms" class="app-view d-none">
+                <div class="card border-0 p-3 mb-4 shadow-sm bg-white">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search"></i></span>
+                                <input type="text" class="form-control border-start-0" id="search-rooms-input" placeholder="Search by Room Number...">
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <select class="form-select" id="filter-rooms-status">
+                                <option value="">Filter by Status</option>
+                                <option value="Vacant">Vacant</option>
+                                <option value="Occupied">Occupied</option>
+                                <option value="Maintenance">Maintenance</option>
+                                <option value="Reserved">Reserved</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-5 text-end">
+                            <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="openRoomModal()">
+                                <i class="bi bi-plus-lg"></i> Add Room
+                            </button>
+                        </div>
+                    </div>
+                </div>
 
-    <!-- ================= MODALS ================= -->
+                <div class="card border-0 shadow-sm bg-white">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light text-uppercase" style="font-size: 11px;">
+                                    <tr>
+                                        <th class="ps-3">Room No</th>
+                                        <th>Location / Wing</th>
+                                        <th>Room Type</th>
+                                        <th>Monthly Rent</th>
+                                        <th>Electricity Meter</th>
+                                        <th>Max Occupants</th>
+                                        <th>Status</th>
+                                        <th class="text-end pe-3">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-rooms-body">
+                                    <!-- Populated programmatically by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="rooms-empty-state" class="d-none text-center py-5">
+                            <i class="bi bi-folder-x fs-1 text-muted"></i>
+                            <p class="mt-2 text-muted">No rooms found. Get started by adding a room.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
 
-    <!-- Room Modal -->
+            <!-- ================================================================= -->
+            <!-- VIEW: TENANTS                                                     -->
+            <!-- ================================================================= -->
+            <section id="view-tenants" class="app-view d-none">
+                <div class="card border-0 p-3 mb-4 shadow-sm bg-white">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-search"></i></span>
+                                <input type="text" class="form-control border-start-0" id="search-tenants-input" placeholder="Search by name, phone or room...">
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <select class="form-select" id="filter-tenants-status">
+                                <option value="">Filter Status</option>
+                                <option value="Active">Active</option>
+                                <option value="Notice Period">Notice Period</option>
+                                <option value="Left">Left</option>
+                            </select>
+                        </div>
+                        <div class="col-6 col-md-5 text-end">
+                            <button class="btn btn-primary d-inline-flex align-items-center gap-2" onclick="openTenantModal()">
+                                <i class="bi bi-person-plus-fill"></i> Add Tenant
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm bg-white">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light text-uppercase" style="font-size: 11px;">
+                                    <tr>
+                                        <th class="ps-3">Profile Photo</th>
+                                        <th>Tenant Name</th>
+                                        <th>Room No</th>
+                                        <th>Mobile Number</th>
+                                        <th>Docs Percentage</th>
+                                        <th>Agreement End Date</th>
+                                        <th>Status</th>
+                                        <th class="text-end pe-3">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-tenants-body">
+                                    <!-- Populated programmatically by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                        <div id="tenants-empty-state" class="d-none text-center py-5">
+                            <i class="bi bi-people fs-1 text-muted"></i>
+                            <p class="mt-2 text-muted">No tenants registered. Add your first tenant to begin.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================================================================= -->
+            <!-- VIEW: RENT COLLECTION                                             -->
+            <!-- ================================================================= -->
+            <section id="view-rent" class="app-view d-none">
+                <div class="card border-0 p-3 mb-4 shadow-sm bg-white">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-12 col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-funnel"></i></span>
+                                <input type="month" class="form-control border-start-0" id="filter-rent-month">
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-8 text-md-end">
+                            <button class="btn btn-success d-inline-flex align-items-center gap-2" onclick="openRentModal()">
+                                <i class="bi bi-cash"></i> Record Rent Collection
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm bg-white">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light text-uppercase" style="font-size: 11px;">
+                                    <tr>
+                                        <th class="ps-3">Date Collected</th>
+                                        <th>Tenant</th>
+                                        <th>Room</th>
+                                        <th>Applicable Month</th>
+                                        <th>Rent Amount</th>
+                                        <th>Mode</th>
+                                        <th>Transaction No</th>
+                                        <th>Status</th>
+                                        <th class="text-end pe-3">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-rent-body">
+                                    <!-- Populated programmatically by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================================================================= -->
+            <!-- VIEW: ELECTRICITY BILLS                                           -->
+            <!-- ================================================================= -->
+            <section id="view-electricity" class="app-view d-none">
+                <div class="card border-0 p-3 mb-4 shadow-sm bg-white">
+                    <div class="row g-3 align-items-center">
+                        <div class="col-12 col-md-4">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0"><i class="bi bi-filter"></i></span>
+                                <input type="month" class="form-control border-start-0" id="filter-electricity-month">
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-8 text-md-end">
+                            <button class="btn btn-warning text-dark fw-bold d-inline-flex align-items-center gap-2" onclick="openElecModal()">
+                                <i class="bi bi-plus-lg"></i> Record Meter Reading
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card border-0 shadow-sm bg-white">
+                    <div class="card-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light text-uppercase" style="font-size: 11px;">
+                                    <tr>
+                                        <th class="ps-3">Billing Month</th>
+                                        <th>Room No</th>
+                                        <th>Prev Reading</th>
+                                        <th>Curr Reading</th>
+                                        <th>Consumed (Units)</th>
+                                        <th>Amount Due</th>
+                                        <th>Status</th>
+                                        <th class="text-end pe-3">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-electricity-body">
+                                    <!-- Populated programmatically by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================================================================= -->
+            <!-- VIEW: DOCUMENT CHECKLIST                                          -->
+            <!-- ================================================================= -->
+            <section id="view-documents" class="app-view d-none">
+                <div class="card border-0 shadow-sm bg-white p-4">
+                    <h5 class="fw-bold mb-4">Verification Document Tracking Matrix</h5>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Tenant Profile</th>
+                                    <th>Aadhar Card</th>
+                                    <th>PAN Card</th>
+                                    <th>Agreement</th>
+                                    <th>Police Verification</th>
+                                    <th>Overall Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-documents-body">
+                                <!-- Populated programmatically by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================================================================= -->
+            <!-- VIEW: ALERTS                                                      -->
+            <!-- ================================================================= -->
+            <section id="view-alerts" class="app-view d-none">
+                <div class="card border-0 shadow-sm bg-white p-4">
+                    <h5 class="fw-bold mb-4">Alerts, Expirations, & Overdue Dues Console</h5>
+                    <div class="row g-3" id="alerts-matrix-container">
+                        <!-- Dynamic notification panels go here -->
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================================================================= -->
+            <!-- VIEW: HISTORY ARCHEOLOGY                                          -->
+            <!-- ================================================================= -->
+            <section id="view-history" class="app-view d-none">
+                <div class="card border-0 p-3 mb-4 shadow-sm bg-white">
+                    <div class="row g-3">
+                        <div class="col-12 col-md-6">
+                            <input type="text" class="form-control" id="search-history-input" placeholder="Search historical logs by tenant name or room...">
+                        </div>
+                        <div class="col-12 col-md-6 text-md-end">
+                            <span class="text-muted small">Access archived historical records of checked-out tenants.</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="card border-0 shadow-sm bg-white p-0">
+                    <div class="table-responsive">
+                        <table class="table table-striped align-middle mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th class="ps-3">Name</th>
+                                    <th>Aadhar No</th>
+                                    <th>Assigned Room</th>
+                                    <th>Checkout Date</th>
+                                    <th>Final Bill Amount</th>
+                                    <th>Ref. Trans No</th>
+                                    <th class="text-end pe-3">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-history-body">
+                                <!-- Populated programmatically by JavaScript -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================================================================= -->
+            <!-- VIEW: REPORTS & EXPORT SHELL                                      -->
+            <!-- ================================================================= -->
+            <section id="view-reports" class="app-view d-none">
+                <div class="row g-4">
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card shadow-sm h-100 border-0 bg-white p-4 text-center">
+                            <i class="bi bi-file-earmark-spreadsheet text-success fs-1 mb-3"></i>
+                            <h5 class="fw-bold">Excel Master Tenants</h5>
+                            <p class="text-muted small mb-4">Export entire registry profile of active tenants including contact references.</p>
+                            <button class="btn btn-outline-success w-100 py-2 mt-auto" onclick="exportData('tenants', 'excel')">Download Excel Document</button>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card shadow-sm h-100 border-0 bg-white p-4 text-center">
+                            <i class="bi bi-file-earmark-pdf text-danger fs-1 mb-3"></i>
+                            <h5 class="fw-bold">PDF Rent Roll</h5>
+                            <p class="text-muted small mb-4">Generate full fiscal audit sheets of all rent transactions collected.</p>
+                            <button class="btn btn-outline-danger w-100 py-2 mt-auto" onclick="exportData('rent', 'pdf')">Generate Audit Report</button>
+                        </div>
+                    </div>
+                    <div class="col-md-6 col-lg-4">
+                        <div class="card shadow-sm h-100 border-0 bg-white p-4 text-center">
+                            <i class="bi bi-file-zip text-primary fs-1 mb-3"></i>
+                            <h5 class="fw-bold">JSON System Dump</h5>
+                            <p class="text-muted small mb-4">Export entire Firestore cluster state into structured JSON file for emergency backups.</p>
+                            <button class="btn btn-outline-primary w-100 py-2 mt-auto" onclick="exportBackupJSON()">Download Raw JSON</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ================================================================= -->
+            <!-- VIEW: SETTINGS MODULE                                             -->
+            <!-- ================================================================= -->
+            <section id="view-settings" class="app-view d-none">
+                <div class="row g-4">
+                    <div class="col-12 col-md-6">
+                        <div class="card border-0 shadow-sm p-4 bg-white">
+                            <h5 class="fw-bold mb-3">Organization Identity Settings</h5>
+                            <hr class="mt-0 mb-3">
+                            <div class="row g-3">
+                                <div class="col-12"><label class="form-label small fw-semibold">Property Name</label><input type="text" id="set-prop-name" class="form-control" value="PropManager Pro Assets"></div>
+                                <div class="col-12"><label class="form-label small fw-semibold">Billing Address</label><textarea id="set-prop-addr" class="form-control" rows="2">123 Business Boulevard, Sector 10</textarea></div>
+                                <div class="col-md-6"><label class="form-label small fw-semibold">Contact Email</label><input type="email" id="set-prop-email" class="form-control" value="billing@propmanager.com"></div>
+                                <div class="col-md-6"><label class="form-label small fw-semibold">Contact Phone</label><input type="text" id="set-prop-phone" class="form-control" value="+91 98765 43210"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <div class="card border-0 shadow-sm p-4 bg-white h-100">
+                            <h5 class="fw-bold mb-3">Disaster Recovery & Restore Settings</h5>
+                            <hr class="mt-0 mb-3">
+                            <p class="text-muted small">Import a valid PropManager JSON file to completely wipe and restore your Firestore collection states.</p>
+                            <div class="mb-4">
+                                <label class="form-label small fw-semibold">Upload Backup File</label>
+                                <input type="file" id="import-backup-file" class="form-control" accept=".json">
+                            </div>
+                            <button class="btn btn-danger w-100 py-2" id="btn-trigger-restore">Trigger Database Restore</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- INTERACTIVE DIALOG MODALS                                                 -->
+    <!-- ========================================================================= -->
+
+    <!-- Modal: Add/Edit Room -->
     <div class="modal fade" id="modalRoom" tabindex="-1" data-bs-backdrop="static">
-        <div class="modal-dialog modal-lg">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <form id="formRoom">
-                    <div class="modal-header bg-light">
-                        <h5 class="modal-title" id="modalRoomTitle">Add Room</h5>
+                <form id="form-room">
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold" id="modalRoomLabel">Add Room</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body row g-3">
-                        <input type="hidden" id="room_id">
-                        <div class="col-md-4"><label class="form-label">Room Number*</label><input type="text" id="room_number" class="form-control" required></div>
-                        <div class="col-md-4"><label class="form-label">Floor*</label><input type="text" id="room_floor" class="form-control" required></div>
-                        <div class="col-md-4"><label class="form-label">Type</label><select id="room_type" class="form-select"><option>Single</option><option>Double</option><option>1BHK</option></select></div>
-                        <div class="col-md-4"><label class="form-label">Monthly Rent*</label><input type="number" id="room_rent" class="form-control" required></div>
-                        <div class="col-md-4"><label class="form-label">Max Occupancy</label><input type="number" id="room_occupancy" class="form-control" value="1"></div>
-                        <div class="col-md-4"><label class="form-label">Elec. Meter No</label><input type="text" id="room_meter" class="form-control"></div>
-                        <div class="col-md-12"><label class="form-label">Status</label><select id="room_status" class="form-select"><option>Vacant</option><option>Occupied</option><option>Maintenance</option></select></div>
+                        <input type="hidden" id="room-edit-id">
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Room Number*</label>
+                            <input type="text" id="room_number" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Floor Number*</label>
+                            <input type="text" id="room_floor" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Block / Wing</label>
+                            <input type="text" id="room_block" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Room Type*</label>
+                            <select id="room_type" class="form-select" required>
+                                <option value="">Select Type</option>
+                                <option value="Single">Single</option>
+                                <option value="Double">Double</option>
+                                <option value="1BHK">1BHK</option>
+                                <option value="2BHK">2BHK</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Monthly Rent (₹)*</label>
+                            <input type="number" id="room_rent" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Max Occupancy*</label>
+                            <input type="number" id="room_occupancy" class="form-control" value="1" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Electric Meter No</label>
+                            <input type="text" id="room_elec_meter" class="form-control">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Water Meter No</label>
+                            <input type="text" id="room_water_meter" class="form-control">
+                        </div>
+                        <div class="col-md-12">
+                            <label class="form-label small fw-semibold">Status*</label>
+                            <select id="room_status" class="form-select" required>
+                                <option value="Vacant">Vacant</option>
+                                <option value="Occupied">Occupied</option>
+                                <option value="Maintenance">Maintenance</option>
+                                <option value="Reserved">Reserved</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="modal-footer"><button type="submit" class="btn btn-primary">Save Room</button></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary">Save Room</button>
+                    </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- Tenant Modal -->
+    <!-- Modal: Add/Edit Tenant (Enterprise Complete Stack) -->
     <div class="modal fade" id="modalTenant" tabindex="-1" data-bs-backdrop="static">
-        <div class="modal-dialog modal-xl">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
             <div class="modal-content">
-                <form id="formTenant">
-                    <div class="modal-header bg-light">
-                        <h5 class="modal-title">Manage Tenant</h5>
+                <form id="form-tenant">
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold">Manage Tenant Record</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                        <input type="hidden" id="tenant-edit-id">
+                        
+                        <!-- Tenant Profile Photo Shell -->
+                        <div class="row mb-4">
+                            <div class="col-12 text-center">
+                                <img src="https://via.placeholder.com/110" id="tenant-preview-image" class="profile-photo-circle mb-2" alt="Avatar">
+                                <div>
+                                    <label class="btn btn-sm btn-outline-dark position-relative">
+                                        <i class="bi bi-camera"></i> Change Photo
+                                        <input type="file" id="tenant-photo-input" class="position-absolute opacity-0" style="width: 1px; height: 1px;" accept="image/*">
+                                    </label>
+                                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="btn-remove-photo"><i class="bi bi-trash"></i></button>
+                                </div>
+                                <small class="text-muted mt-1 d-block" style="font-size: 11px;">Enforces auto-compression to &lt; 200KB before storage upload.</small>
+                            </div>
+                        </div>
+
+                        <!-- Personal Credentials Section -->
+                        <h6 class="fw-bold text-primary mb-3">1. Personal Credentials</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4"><label class="form-label small">Tenant Name*</label><input type="text" id="ten_name" class="form-control" required></div>
+                            <div class="col-md-4"><label class="form-label small">Father's Name</label><input type="text" id="ten_father" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label small">Mother's Name</label><input type="text" id="ten_mother" class="form-control"></div>
+                            <div class="col-md-4">
+                                <label class="form-label small">Gender*</label>
+                                <select id="ten_gender" class="form-select" required>
+                                    <option value="">Select Gender</option><option value="Male">Male</option><option value="Female">Female</option><option value="Other">Other</option>
+                                </select>
+                            </div>
+                            <div class="col-md-4"><label class="form-label small">Date of Birth</label><input type="date" id="ten_dob" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label small">Aadhar Number*</label><input type="text" id="ten_aadhar" class="form-control" required></div>
+                            <div class="col-md-4"><label class="form-label small">PAN Card Number</label><input type="text" id="ten_pan" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label small">Passport No (Optional)</label><input type="text" id="ten_passport" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label small">DL Number (Optional)</label><input type="text" id="ten_dl" class="form-control"></div>
+                        </div>
+
+                        <!-- Contact & Professional References -->
+                        <h6 class="fw-bold text-primary mb-3">2. Contact References</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4"><label class="form-label small">Mobile Number*</label><input type="text" id="ten_mobile" class="form-control" required></div>
+                            <div class="col-md-4"><label class="form-label small">WhatsApp Number</label><input type="text" id="ten_whatsapp" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label small">Email Address</label><input type="email" id="ten_email" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label small">Emergency Contact Name</label><input type="text" id="ten_emerg_name" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label small">Relation</label><input type="text" id="ten_emerg_rel" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label small">Occupation</label><input type="text" id="ten_occupation" class="form-control"></div>
+                        </div>
+
+                        <!-- Addresses Matrix -->
+                        <h6 class="fw-bold text-primary mb-3">3. Address Information</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6"><label class="form-label small">Permanent Address</label><textarea id="ten_perm_addr" class="form-control" rows="2"></textarea></div>
+                            <div class="col-md-6"><label class="form-label small">Current Address</label><textarea id="ten_curr_addr" class="form-control" rows="2"></textarea></div>
+                        </div>
+
+                        <!-- Lease & Assignment Options -->
+                        <h6 class="fw-bold text-primary mb-3">4. Lease Assignment</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-4"><label class="form-label small">Select Room To Assign*</label><select id="ten_room_id" class="form-select" required><option value="">No vacant rooms</option></select></div>
+                            <div class="col-md-4"><label class="form-label small">Joining Date*</label><input type="date" id="ten_join_date" class="form-control" required></div>
+                            <div class="col-md-4"><label class="form-label small">Agreement Start Date*</label><input type="date" id="ten_start_date" class="form-control" required></div>
+                            <div class="col-md-4"><label class="form-label small">Agreement End Date*</label><input type="date" id="ten_end_date" class="form-control" required></div>
+                            <div class="col-md-4"><label class="form-label small">Monthly Rent Assigned (₹)*</label><input type="number" id="ten_rent" class="form-control" required></div>
+                            <div class="col-md-4"><label class="form-label small">Security Deposit Collected (₹)</label><input type="number" id="ten_deposit" class="form-control"></div>
+                            <div class="col-md-6">
+                                <label class="form-label small">Tenant Status*</label>
+                                <select id="ten_status" class="form-select" required>
+                                    <option value="Active">Active</option>
+                                    <option value="Notice Period">Notice Period</option>
+                                    <option value="Left">Left</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6"><label class="form-label small">Tenant Remarks</label><input type="text" id="ten_remarks" class="form-control"></div>
+                        </div>
+
+                        <!-- Document Compliance Checklist -->
+                        <h6 class="fw-bold text-primary mb-3">5. Verification Verification Documents Checklist</h6>
+                        <div class="row g-2">
+                            <div class="col-md-3"><div class="form-check"><input type="checkbox" id="chk_doc_aadhar" class="form-check-input"><label class="form-check-label small">Aadhar Card Verification</label></div></div>
+                            <div class="col-md-3"><div class="form-check"><input type="checkbox" id="chk_doc_pan" class="form-check-input"><label class="form-check-label small">PAN Card Verification</label></div></div>
+                            <div class="col-md-3"><div class="form-check"><input type="checkbox" id="chk_doc_agreement" class="form-check-input"><label class="form-check-label small">Signed Lease Agreement</label></div></div>
+                            <div class="col-md-3"><div class="form-check"><input type="checkbox" id="chk_doc_police" class="form-check-input"><label class="form-check-label small">Police Verification Filed</label></div></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-primary">Commit Registry Entry</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal: Record Rent Receipt Ledger Entry -->
+    <div class="modal fade" id="modalRent" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <form id="form-rent">
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold">Rent Receipt Payment Ledger</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
                     <div class="modal-body row g-3">
-                        <input type="hidden" id="tenant_id">
-                        <!-- Photo Upload & Compress -->
-                        <div class="col-12 text-center mb-3">
-                            <img src="https://via.placeholder.com/100" id="tenant_photo_preview" class="profile-img-preview mb-2 d-block mx-auto">
-                            <small class="text-muted d-block mb-1">Max size: 200KB (Auto-compressed)</small>
-                            <input type="file" id="tenant_photo" class="form-control form-control-sm w-50 mx-auto" accept="image/jpeg, image/png, image/webp">
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Select Active Tenant*</label>
+                            <select id="rent_tenant_id" class="form-select" required>
+                                <option value="">Select Tenant</option>
+                            </select>
                         </div>
-                        
-                        <h6 class="border-bottom pb-2">Personal Details</h6>
-                        <div class="col-md-4"><label class="form-label">Full Name*</label><input type="text" id="tenant_name" class="form-control" required></div>
-                        <div class="col-md-4"><label class="form-label">Mobile Number*</label><input type="text" id="tenant_phone" class="form-control" required></div>
-                        <div class="col-md-4"><label class="form-label">Aadhar Number</label><input type="text" id="tenant_aadhar" class="form-control"></div>
-                        
-                        <h6 class="border-bottom pb-2 mt-4">Room & Agreement</h6>
-                        <div class="col-md-4">
-                            <label class="form-label">Assign Room</label>
-                            <select id="tenant_room" class="form-select"><option value="">Select Room...</option></select>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Month Paid*</label>
+                            <select id="rent_month" class="form-select" required>
+                                <option value="January">January</option><option value="February">February</option><option value="March">March</option>
+                                <option value="April">April</option><option value="May">May</option><option value="June">June</option>
+                                <option value="July">July</option><option value="August">August</option><option value="September">September</option>
+                                <option value="October">October</option><option value="November">November</option><option value="December">December</option>
+                            </select>
                         </div>
-                        <div class="col-md-4"><label class="form-label">Joining Date</label><input type="date" id="tenant_join_date" class="form-control"></div>
-                        <div class="col-md-4"><label class="form-label">Security Deposit</label><input type="number" id="tenant_deposit" class="form-control"></div>
-                        
-                        <h6 class="border-bottom pb-2 mt-4">Document Checklist</h6>
-                        <div class="col-md-3"><div class="form-check"><input class="form-check-input doc-check" type="checkbox" id="doc_aadhar"><label class="form-check-label">Aadhar Card</label></div></div>
-                        <div class="col-md-3"><div class="form-check"><input class="form-check-input doc-check" type="checkbox" id="doc_pan"><label class="form-check-label">PAN Card</label></div></div>
-                        <div class="col-md-3"><div class="form-check"><input class="form-check-input doc-check" type="checkbox" id="doc_agreement"><label class="form-check-label">Rental Agreement</label></div></div>
-                        <div class="col-md-3"><div class="form-check"><input class="form-check-input doc-check" type="checkbox" id="doc_police"><label class="form-check-label">Police Verif.</label></div></div>
-                        
-                        <div class="col-md-12 mt-3"><label class="form-label">Status</label><select id="tenant_status" class="form-select"><option>Active</option><option>Notice Period</option><option>Left</option></select></div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Year Paid*</label>
+                            <input type="number" id="rent_year" class="form-control" value="2024" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Amount Received (₹)*</label>
+                            <input type="number" id="rent_amount_paid" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Discount Amount (₹)</label>
+                            <input type="number" id="rent_discount" class="form-control" value="0">
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Payment Mode*</label>
+                            <select id="rent_mode" class="form-select" required>
+                                <option value="Cash">Cash</option><option value="UPI">UPI / GPay</option>
+                                <option value="Bank Transfer">Direct Bank Transfer</option><option value="Cheque">Bank Check</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Transaction / Ref Number</label>
+                            <input type="text" id="rent_trans_no" class="form-control">
+                        </div>
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Remarks</label>
+                            <input type="text" id="rent_remarks" class="form-control">
+                        </div>
                     </div>
-                    <div class="modal-footer"><button type="submit" class="btn btn-primary">Save Tenant</button></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-success">Record Payment Transaction</button>
+                    </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- Rent Collection Modal -->
-    <div class="modal fade" id="modalRent" tabindex="-1">
-        <div class="modal-dialog">
+    <!-- Modal: Record Electricity Bills -->
+    <div class="modal fade" id="modalElectricity" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
-                <form id="formRent">
-                    <div class="modal-header bg-light"><h5 class="modal-title">Record Rent Payment</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-                    <div class="modal-body row g-3">
-                        <div class="col-md-12"><label class="form-label">Select Tenant*</label><select id="rent_tenant" class="form-select" required></select></div>
-                        <div class="col-md-6"><label class="form-label">Amount Paid*</label><input type="number" id="rent_amount" class="form-control" required></div>
-                        <div class="col-md-6"><label class="form-label">Payment Mode</label><select id="rent_mode" class="form-select"><option>Cash</option><option>UPI</option><option>Bank Transfer</option></select></div>
-                        <div class="col-md-6"><label class="form-label">Payment Date</label><input type="date" id="rent_date" class="form-control" required></div>
-                        <div class="col-md-6"><label class="form-label">Status</label><select id="rent_status" class="form-select"><option>Paid</option><option>Partially Paid</option></select></div>
+                <form id="form-electricity">
+                    <div class="modal-header">
+                        <h5 class="modal-title fw-bold">Electricity Billing & Reading Entry</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                     </div>
-                    <div class="modal-footer"><button type="submit" class="btn btn-success">Save Payment</button></div>
+                    <div class="modal-body row g-3">
+                        <div class="col-12">
+                            <label class="form-label small fw-semibold">Target Room*</label>
+                            <select id="elec_room_id" class="form-select" required><option value="">Select Room</option></select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Billing Month*</label>
+                            <input type="month" id="elec_month" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Rate Per Unit (₹)*</label>
+                            <input type="number" id="elec_rate" class="form-control" value="8" step="0.1" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Previous Meter Reading*</label>
+                            <input type="number" id="elec_prev_reading" class="form-control" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label small fw-semibold">Current Meter Reading*</label>
+                            <input type="number" id="elec_curr_reading" class="form-control" required>
+                        </div>
+                        <div class="col-12 bg-light p-3 rounded border">
+                            <div class="d-flex justify-content-between mb-1"><span class="small">Units Consumed:</span><span id="calc-units-consumed" class="fw-bold">0</span></div>
+                            <div class="d-flex justify-content-between"><span class="small">Calculated Bill:</span><span id="calc-bill-total" class="fw-bold text-danger">₹0.00</span></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-warning text-dark fw-bold">Commit Meter Bill</button>
+                    </div>
                 </form>
             </div>
         </div>
     </div>
 
-    <!-- Receipt Print Template (Hidden) -->
-    <div id="receiptTemplate" class="d-none bg-white p-4" style="width:800px; color:black;">
-        <div class="text-center border-bottom pb-3 mb-3">
-            <h2>RENT RECEIPT</h2>
-            <p class="mb-0">Property Management Services</p>
+    <!-- Modal: Checkout / Offboarding Settlement Sheet -->
+    <div class="modal fade" id="modalCheckout" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg modal-dialog-centered">
+            <div class="modal-content">
+                <form id="form-checkout">
+                    <div class="modal-header bg-dark text-white">
+                        <h5 class="modal-title fw-bold">Tenant Checkout & Deposit Settlement Sheet</h5>
+                        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body row g-3">
+                        <input type="hidden" id="chkout-tenant-id">
+                        <div class="col-12 bg-warning bg-opacity-10 p-3 rounded border border-warning">
+                            <h6 class="fw-bold mb-1">Warning: Offboarding Operation</h6>
+                            <small class="text-muted d-block">This action permanently releases the tenant. The assigned room state will be returned to 'Vacant' immediately upon settlement execution.</small>
+                        </div>
+                        <div class="col-md-6"><label class="form-label small">Leaving Date</label><input type="date" id="chkout_date" class="form-control" required></div>
+                        <div class="col-md-6"><label class="form-label small">Final Meter Reading</label><input type="number" id="chkout_meter_reading" class="form-control" required></div>
+                        <div class="col-md-4"><label class="form-label small">Damage Deductions (₹)</label><input type="number" id="chkout_damage" class="form-control" value="0"></div>
+                        <div class="col-md-4"><label class="form-label small">Cleaning Deductions (₹)</label><input type="number" id="chkout_cleaning" class="form-control" value="0"></div>
+                        <div class="col-md-4"><label class="form-label small">Other Unpaid Dues (₹)</label><input type="number" id="chkout_dues" class="form-control" value="0"></div>
+                        <div class="col-12"><label class="form-label small">Offboarding Settlement Notes</label><textarea id="chkout_notes" class="form-control" rows="2" placeholder="Describe damage itemization or billing exceptions..."></textarea></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-danger">Execute Settlement & Archive</button>
+                    </div>
+                </form>
+            </div>
         </div>
-        <div class="row mb-4"><div class="col-6"><strong>Receipt No:</strong> <span id="rec_no"></span><br><strong>Date:</strong> <span id="rec_date"></span></div></div>
-        <p>Received with thanks from <strong><span id="rec_tenant"></span></strong> (Room: <span id="rec_room"></span>)</p>
-        <p>A sum of <strong>Rs. <span id="rec_amount"></span></strong> via <span id="rec_mode"></span>.</p>
-        <div class="mt-5 text-end"><p>Authorized Signatory</p></div>
     </div>
 
-    <!-- System Utilities -->
-    <div id="spinner" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-75 d-none justify-content-center align-items-center" style="z-index: 9999;">
-        <div class="spinner-border text-light" style="width: 4rem; height: 4rem;" role="status"></div>
+    <!-- Modal: Confirmation Dialogue Shell -->
+    <div class="modal fade" id="confirmationModal" tabindex="-1">
+        <div class="modal-dialog modal-sm modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header border-0 pb-0"><h6 class="modal-title fw-bold" id="confirmationModalLabel">Confirm action</h6><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                <div class="modal-body py-3" id="confirmationModalMessage">Are you sure you want to perform this structural delete?</div>
+                <div class="modal-footer border-0 pt-0"><button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">Cancel</button><button type="button" class="btn btn-sm btn-danger" id="btn-confirm-action">Confirm</button></div>
+            </div>
+        </div>
     </div>
 
+    <!-- ========================================================================= -->
+    <!-- PRINTABLE RECEIPT TEMPLATE (Hidden from main web layout)                   -->
+    <!-- ========================================================================= -->
+    <div id="receiptTemplate" class="d-none bg-white p-5 text-dark mx-auto" style="width: 794px; min-height: 1123px; font-family: monospace;">
+        <div class="text-center mb-5">
+            <h2 class="fw-bold m-0" id="pr-comp-name">PROPMANAGER PRO PROPERTIES</h2>
+            <p class="m-0 small" id="pr-comp-address">Sector 10, Industrial Block, Corporate Heights</p>
+            <p class="m-0 small" id="pr-comp-contact">Phone: +91 98765 43210 | Email: billing@propmanager.com</p>
+            <div class="border-top border-bottom border-dark py-2 my-3"><h4 class="m-0 fw-bold">TAX RECEIPT / RENT INVOICE</h4></div>
+        </div>
+        
+        <div class="row mb-4">
+            <div class="col-6">
+                <strong>INVOICED TO:</strong><br>
+                <span id="pr-tenant-name">John Doe</span><br>
+                Assigned Room: <span id="pr-room-no">101</span><br>
+                Mobile: <span id="pr-tenant-phone">99999 88888</span>
+            </div>
+            <div class="col-6 text-end">
+                <strong>RECEIPT NO:</strong> <span id="pr-receipt-id">TXN-00000000</span><br>
+                <strong>DATE:</strong> <span id="pr-date">01-01-2024</span><br>
+                <strong>FISCAL MONTH:</strong> <span id="pr-month-paid">January 2024</span>
+            </div>
+        </div>
+
+        <table class="table table-bordered border-dark mt-5">
+            <thead>
+                <tr>
+                    <th>Ledger Description</th>
+                    <th class="text-end" style="width: 150px;">Total Amount</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr><td>Assigned Monthly Room Rental Fee</td><td class="text-end" id="pr-subtotal-rent">₹0.00</td></tr>
+                <tr><td>Discount Applied</td><td class="text-end" id="pr-subtotal-discount">-₹0.00</td></tr>
+                <tr class="fw-bold"><td>GRAND TOTAL NET PAID</td><td class="text-end" id="pr-total-paid">₹0.00</td></tr>
+            </tbody>
+        </table>
+
+        <div class="mt-5 pt-5 row">
+            <div class="col-6"><p class="small text-muted">Generated electronically. No physical signature required.</p></div>
+            <div class="col-6 text-end"><div class="border-top border-dark d-inline-block pt-2 px-5 text-center">Authorized System Signatory</div></div>
+        </div>
+    </div>
+
+    <!-- ========================================================================= -->
+    <!-- SYSTEM NOTIFICATION TOAST & SPINNERS                                      -->
+    <!-- ========================================================================= -->
+    
+    <!-- Toast Layer -->
     <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 9999;">
-        <div id="systemToast" class="toast text-white border-0" role="alert"><div class="d-flex"><div class="toast-body" id="toastMsg"></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>
+        <div id="systemToast" class="toast align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="d-flex">
+                <div class="toast-body" id="toastMsg">Notification message template</div>
+                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+            </div>
+        </div>
     </div>
 
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Core App Logic -->
-    <script type="module" src="app.js"></script>
+    <!-- Global Application Lockout Spinner -->
+    <div id="app-spinner" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-75 d-none justify-content-center align-items-center" style="z-index: 10000;">
+        <div class="text-center text-white">
+            <div class="spinner-border text-light mb-2" role="status" style="width: 3rem; height: 3rem;"></div>
+            <p class="m-0 small text-uppercase letter-spacing">Writing state to cloud database...</p>
+        </div>
+    </div>
+
 </body>
 </html>

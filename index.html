@@ -1,131 +1,301 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-bs-theme="light">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tenant Management System</title>
-    <!-- Bootstrap 5 CSS CDN -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Enterprise Property Management</title>
+    <!-- Bootstrap 5 & Icons -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- PDF & Excel Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        /* Minimal layout overrides using standard CSS properties */
+        body { overflow-x: hidden; background-color: #f8f9fa; }
+        .sidebar { width: 250px; height: 100vh; position: fixed; top: 0; left: 0; z-index: 1040; transition: transform 0.3s ease; }
+        .main-content { margin-left: 250px; transition: margin-left 0.3s ease; min-height: 100vh; }
+        @media (max-width: 768px) {
+            .sidebar { transform: translateX(-100%); }
+            .sidebar.show { transform: translateX(0); }
+            .main-content { margin-left: 0; }
+        }
+        .nav-link { color: #cbd5e1; border-radius: 0.375rem; margin-bottom: 0.25rem; }
+        .nav-link:hover, .nav-link.active { background-color: #334155; color: white; }
+        .profile-img-preview { width: 100px; height: 100px; object-fit: cover; border-radius: 50%; border: 2px solid #dee2e6; }
+        .doc-indicator { width: 15px; height: 15px; border-radius: 50%; display: inline-block; }
+    </style>
 </head>
-<body class="bg-light">
+<body>
 
-    <!-- Top Navigation Bar -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark sticky-top">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="#" data-target="dashboard">TMS</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar bg-dark text-white p-3 d-flex flex-column" id="sidebar">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h4 class="m-0 text-white fw-bold"><i class="bi bi-buildings me-2"></i>PropManager</h4>
+            <button class="btn btn-sm btn-outline-light d-md-none" onclick="document.getElementById('sidebar').classList.remove('show')"><i class="bi bi-x-lg"></i></button>
+        </div>
+        <ul class="nav flex-column mb-auto nav-pills">
+            <li class="nav-item"><a href="#" class="nav-link active" data-target="dashboard"><i class="bi bi-speedometer2 me-2"></i>Dashboard</a></li>
+            <li class="nav-item"><a href="#" class="nav-link" data-target="rooms"><i class="bi bi-door-open me-2"></i>Rooms</a></li>
+            <li class="nav-item"><a href="#" class="nav-link" data-target="tenants"><i class="bi bi-people me-2"></i>Tenants</a></li>
+            <li class="nav-item"><a href="#" class="nav-link" data-target="rent"><i class="bi bi-cash-coin me-2"></i>Rent Collection</a></li>
+            <li class="nav-item"><a href="#" class="nav-link" data-target="electricity"><i class="bi bi-lightning-charge me-2"></i>Electricity</a></li>
+            <li class="nav-item"><a href="#" class="nav-link" data-target="reports"><i class="bi bi-graph-up me-2"></i>Reports</a></li>
+            <li class="nav-item"><a href="#" class="nav-link" data-target="settings"><i class="bi bi-gear me-2"></i>Settings</a></li>
+        </ul>
+        <div class="mt-auto border-top pt-3 border-secondary">
+            <div class="d-flex align-items-center">
+                <i class="bi bi-person-circle fs-3 me-2"></i>
+                <div>
+                    <h6 class="m-0 text-white">Admin</h6>
+                    <small class="text-secondary">Property Owner</small>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+        <!-- Topbar -->
+        <nav class="navbar navbar-expand-lg navbar-light bg-white shadow-sm sticky-top px-3">
+            <button class="btn btn-light d-md-none me-2" onclick="document.getElementById('sidebar').classList.add('show')">
+                <i class="bi bi-list fs-4"></i>
             </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                    <li class="nav-item">
-                        <a class="nav-link active nav-menu-item" href="#" data-target="dashboard">Dashboard</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link nav-menu-item" href="#" data-target="rooms">Rooms</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link nav-menu-item" href="#" data-target="tenants">Tenants</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link nav-menu-item" href="#" data-target="history">History</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link nav-menu-item" href="#" data-target="reports">Reports</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link nav-menu-item" href="#" data-target="settings">Settings</a>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Main Content Area (Single Page Application Views) -->
-    <div class="container mt-4">
-        
-        <!-- Dashboard View -->
-        <div id="view-dashboard" class="app-view">
-            <h2>Dashboard</h2>
-            <p class="text-muted">Dashboard structure ready.</p>
-        </div>
-
-        <!-- Rooms View -->
-        <div id="view-rooms" class="app-view d-none">
-            <h2>Rooms Management</h2>
-            <p class="text-muted">Rooms structure ready.</p>
-        </div>
-
-        <!-- Tenants View -->
-        <div id="view-tenants" class="app-view d-none">
-            <h2>Tenants Management</h2>
-            <p class="text-muted">Tenants structure ready.</p>
-        </div>
-
-        <!-- History View -->
-        <div id="view-history" class="app-view d-none">
-            <h2>History</h2>
-            <p class="text-muted">History structure ready.</p>
-        </div>
-
-        <!-- Reports View -->
-        <div id="view-reports" class="app-view d-none">
-            <h2>Reports</h2>
-            <p class="text-muted">Reports structure ready.</p>
-        </div>
-
-        <!-- Settings View -->
-        <div id="view-settings" class="app-view d-none">
-            <h2>Settings</h2>
-            <p class="text-muted">Settings structure ready.</p>
-        </div>
-
-    </div>
-
-    <!-- UTILITY SYSTEMS -->
-
-    <!-- Loading Spinner Overlay (Using Bootstrap utility classes and inline z-index to stay on top) -->
-    <div id="loading-spinner" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-50 d-none justify-content-center align-items-center" style="z-index: 1060;">
-        <div class="spinner-border text-light" role="status" style="width: 3rem; height: 3rem;">
-            <span class="visually-hidden">Loading...</span>
-        </div>
-    </div>
-
-    <!-- Toast Notification Container -->
-    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 1055; margin-top: 60px;">
-        <div id="system-toast" class="toast align-items-center text-white border-0" role="alert" aria-live="assertive" aria-atomic="true">
-            <div class="d-flex">
-                <div class="toast-body" id="system-toast-message">
-                    <!-- Toast message will go here -->
+            <h5 class="my-auto d-none d-md-block" id="topbar-title">Dashboard</h5>
+            <div class="ms-auto d-flex align-items-center gap-3">
+                <div class="position-relative">
+                    <i class="bi bi-bell fs-5 cursor-pointer" onclick="new bootstrap.Modal(document.getElementById('alertsModal')).show()"></i>
+                    <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger" id="alert-badge">0</span>
                 </div>
-                <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+                <button class="btn btn-outline-secondary btn-sm" id="btn-theme-toggle"><i class="bi bi-moon"></i></button>
             </div>
-        </div>
-    </div>
+        </nav>
 
-    <!-- Confirmation Modal -->
-    <div class="modal fade" id="confirmationModal" tabindex="-1" aria-labelledby="confirmationModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered">
+        <div class="container-fluid p-4" id="app-container">
+            
+            <!-- VIEW: DASHBOARD -->
+            <div id="view-dashboard" class="app-view">
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-md-3"><div class="card bg-primary text-white h-100"><div class="card-body"><h6>Total Rooms</h6><h2 id="dash-rooms">0</h2></div></div></div>
+                    <div class="col-12 col-md-3"><div class="card bg-success text-white h-100"><div class="card-body"><h6>Occupied</h6><h2 id="dash-occupied">0</h2></div></div></div>
+                    <div class="col-12 col-md-3"><div class="card bg-info text-white h-100"><div class="card-body"><h6>Active Tenants</h6><h2 id="dash-tenants">0</h2></div></div></div>
+                    <div class="col-12 col-md-3"><div class="card bg-warning text-dark h-100"><div class="card-body"><h6>Rent Pending</h6><h2 id="dash-rent-pending">₹0</h2></div></div></div>
+                </div>
+                <div class="row g-3 mb-4">
+                    <div class="col-12 col-lg-8">
+                        <div class="card shadow-sm"><div class="card-body"><canvas id="chartRent" height="100"></canvas></div></div>
+                    </div>
+                    <div class="col-12 col-lg-4">
+                        <div class="card shadow-sm"><div class="card-body"><canvas id="chartOccupancy" height="200"></canvas></div></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: ROOMS -->
+            <div id="view-rooms" class="app-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <input type="text" class="form-control w-25" id="search-rooms" placeholder="Search Rooms...">
+                    <button class="btn btn-primary" onclick="openRoomModal()"><i class="bi bi-plus-lg"></i> Add Room</button>
+                </div>
+                <div class="card shadow-sm">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr><th>No.</th><th>Type</th><th>Floor</th><th>Rent</th><th>Max Occ.</th><th>Status</th><th>Actions</th></tr>
+                            </thead>
+                            <tbody id="table-rooms"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: TENANTS -->
+            <div id="view-tenants" class="app-view d-none">
+                <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center mb-3">
+                    <input type="text" class="form-control" style="max-width:300px;" id="search-tenants" placeholder="Search by Name/Phone...">
+                    <button class="btn btn-primary" onclick="openTenantModal()"><i class="bi bi-person-plus"></i> Add Tenant</button>
+                </div>
+                <div class="card shadow-sm">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr><th>Photo</th><th>Name</th><th>Room</th><th>Phone</th><th>Docs %</th><th>Status</th><th>Actions</th></tr>
+                            </thead>
+                            <tbody id="table-tenants"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: RENT COLLECTION -->
+            <div id="view-rent" class="app-view d-none">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <input type="month" class="form-control w-25" id="filter-rent-month">
+                    <button class="btn btn-success" onclick="openRentModal()"><i class="bi bi-cash"></i> Collect Rent</button>
+                </div>
+                <div class="card shadow-sm">
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr><th>Date</th><th>Tenant</th><th>Room</th><th>Amount</th><th>Mode</th><th>Status</th><th>Actions</th></tr>
+                            </thead>
+                            <tbody id="table-rent"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VIEW: REPORTS & EXPORTS -->
+            <div id="view-reports" class="app-view d-none">
+                <div class="row g-4">
+                    <div class="col-md-4">
+                        <div class="card h-100 shadow-sm text-center p-4">
+                            <i class="bi bi-file-earmark-spreadsheet text-success" style="font-size: 3rem;"></i>
+                            <h5 class="mt-3">Tenant Master Report</h5>
+                            <button class="btn btn-outline-success mt-2" onclick="exportData('tenants', 'excel')">Export Excel</button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card h-100 shadow-sm text-center p-4">
+                            <i class="bi bi-file-earmark-pdf text-danger" style="font-size: 3rem;"></i>
+                            <h5 class="mt-3">Rent Collection Report</h5>
+                            <button class="btn btn-outline-danger mt-2" onclick="exportData('rent', 'pdf')">Export PDF</button>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card h-100 shadow-sm text-center p-4">
+                            <i class="bi bi-database-down text-primary" style="font-size: 3rem;"></i>
+                            <h5 class="mt-3">System Backup</h5>
+                            <button class="btn btn-outline-primary mt-2" onclick="exportBackupJSON()">Download JSON Backup</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Other views initialized as empty skeletons -->
+            <div id="view-electricity" class="app-view d-none"><h5>Electricity Module - Coming Soon</h5></div>
+            <div id="view-settings" class="app-view d-none"><h5>Settings Module - System initialized.</h5></div>
+
+        </div>
+    </main>
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- Room Modal -->
+    <div class="modal fade" id="modalRoom" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-lg">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="confirmationModalLabel">Confirm Action</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body" id="confirmationModalMessage">
-                    Are you sure you want to proceed?
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="button" class="btn btn-primary" id="btn-confirm-action">Confirm</button>
-                </div>
+                <form id="formRoom">
+                    <div class="modal-header bg-light">
+                        <h5 class="modal-title" id="modalRoomTitle">Add Room</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body row g-3">
+                        <input type="hidden" id="room_id">
+                        <div class="col-md-4"><label class="form-label">Room Number*</label><input type="text" id="room_number" class="form-control" required></div>
+                        <div class="col-md-4"><label class="form-label">Floor*</label><input type="text" id="room_floor" class="form-control" required></div>
+                        <div class="col-md-4"><label class="form-label">Type</label><select id="room_type" class="form-select"><option>Single</option><option>Double</option><option>1BHK</option></select></div>
+                        <div class="col-md-4"><label class="form-label">Monthly Rent*</label><input type="number" id="room_rent" class="form-control" required></div>
+                        <div class="col-md-4"><label class="form-label">Max Occupancy</label><input type="number" id="room_occupancy" class="form-control" value="1"></div>
+                        <div class="col-md-4"><label class="form-label">Elec. Meter No</label><input type="text" id="room_meter" class="form-control"></div>
+                        <div class="col-md-12"><label class="form-label">Status</label><select id="room_status" class="form-select"><option>Vacant</option><option>Occupied</option><option>Maintenance</option></select></div>
+                    </div>
+                    <div class="modal-footer"><button type="submit" class="btn btn-primary">Save Room</button></div>
+                </form>
             </div>
         </div>
     </div>
 
-    <!-- Bootstrap 5 JS Bundle CDN -->
+    <!-- Tenant Modal -->
+    <div class="modal fade" id="modalTenant" tabindex="-1" data-bs-backdrop="static">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <form id="formTenant">
+                    <div class="modal-header bg-light">
+                        <h5 class="modal-title">Manage Tenant</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body row g-3">
+                        <input type="hidden" id="tenant_id">
+                        <!-- Photo Upload & Compress -->
+                        <div class="col-12 text-center mb-3">
+                            <img src="https://via.placeholder.com/100" id="tenant_photo_preview" class="profile-img-preview mb-2 d-block mx-auto">
+                            <small class="text-muted d-block mb-1">Max size: 200KB (Auto-compressed)</small>
+                            <input type="file" id="tenant_photo" class="form-control form-control-sm w-50 mx-auto" accept="image/jpeg, image/png, image/webp">
+                        </div>
+                        
+                        <h6 class="border-bottom pb-2">Personal Details</h6>
+                        <div class="col-md-4"><label class="form-label">Full Name*</label><input type="text" id="tenant_name" class="form-control" required></div>
+                        <div class="col-md-4"><label class="form-label">Mobile Number*</label><input type="text" id="tenant_phone" class="form-control" required></div>
+                        <div class="col-md-4"><label class="form-label">Aadhar Number</label><input type="text" id="tenant_aadhar" class="form-control"></div>
+                        
+                        <h6 class="border-bottom pb-2 mt-4">Room & Agreement</h6>
+                        <div class="col-md-4">
+                            <label class="form-label">Assign Room</label>
+                            <select id="tenant_room" class="form-select"><option value="">Select Room...</option></select>
+                        </div>
+                        <div class="col-md-4"><label class="form-label">Joining Date</label><input type="date" id="tenant_join_date" class="form-control"></div>
+                        <div class="col-md-4"><label class="form-label">Security Deposit</label><input type="number" id="tenant_deposit" class="form-control"></div>
+                        
+                        <h6 class="border-bottom pb-2 mt-4">Document Checklist</h6>
+                        <div class="col-md-3"><div class="form-check"><input class="form-check-input doc-check" type="checkbox" id="doc_aadhar"><label class="form-check-label">Aadhar Card</label></div></div>
+                        <div class="col-md-3"><div class="form-check"><input class="form-check-input doc-check" type="checkbox" id="doc_pan"><label class="form-check-label">PAN Card</label></div></div>
+                        <div class="col-md-3"><div class="form-check"><input class="form-check-input doc-check" type="checkbox" id="doc_agreement"><label class="form-check-label">Rental Agreement</label></div></div>
+                        <div class="col-md-3"><div class="form-check"><input class="form-check-input doc-check" type="checkbox" id="doc_police"><label class="form-check-label">Police Verif.</label></div></div>
+                        
+                        <div class="col-md-12 mt-3"><label class="form-label">Status</label><select id="tenant_status" class="form-select"><option>Active</option><option>Notice Period</option><option>Left</option></select></div>
+                    </div>
+                    <div class="modal-footer"><button type="submit" class="btn btn-primary">Save Tenant</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rent Collection Modal -->
+    <div class="modal fade" id="modalRent" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form id="formRent">
+                    <div class="modal-header bg-light"><h5 class="modal-title">Record Rent Payment</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body row g-3">
+                        <div class="col-md-12"><label class="form-label">Select Tenant*</label><select id="rent_tenant" class="form-select" required></select></div>
+                        <div class="col-md-6"><label class="form-label">Amount Paid*</label><input type="number" id="rent_amount" class="form-control" required></div>
+                        <div class="col-md-6"><label class="form-label">Payment Mode</label><select id="rent_mode" class="form-select"><option>Cash</option><option>UPI</option><option>Bank Transfer</option></select></div>
+                        <div class="col-md-6"><label class="form-label">Payment Date</label><input type="date" id="rent_date" class="form-control" required></div>
+                        <div class="col-md-6"><label class="form-label">Status</label><select id="rent_status" class="form-select"><option>Paid</option><option>Partially Paid</option></select></div>
+                    </div>
+                    <div class="modal-footer"><button type="submit" class="btn btn-success">Save Payment</button></div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Receipt Print Template (Hidden) -->
+    <div id="receiptTemplate" class="d-none bg-white p-4" style="width:800px; color:black;">
+        <div class="text-center border-bottom pb-3 mb-3">
+            <h2>RENT RECEIPT</h2>
+            <p class="mb-0">Property Management Services</p>
+        </div>
+        <div class="row mb-4"><div class="col-6"><strong>Receipt No:</strong> <span id="rec_no"></span><br><strong>Date:</strong> <span id="rec_date"></span></div></div>
+        <p>Received with thanks from <strong><span id="rec_tenant"></span></strong> (Room: <span id="rec_room"></span>)</p>
+        <p>A sum of <strong>Rs. <span id="rec_amount"></span></strong> via <span id="rec_mode"></span>.</p>
+        <div class="mt-5 text-end"><p>Authorized Signatory</p></div>
+    </div>
+
+    <!-- System Utilities -->
+    <div id="spinner" class="position-fixed top-0 start-0 w-100 h-100 bg-dark bg-opacity-75 d-none justify-content-center align-items-center" style="z-index: 9999;">
+        <div class="spinner-border text-light" style="width: 4rem; height: 4rem;" role="status"></div>
+    </div>
+
+    <div class="toast-container position-fixed bottom-0 end-0 p-3" style="z-index: 9999;">
+        <div id="systemToast" class="toast text-white border-0" role="alert"><div class="d-flex"><div class="toast-body" id="toastMsg"></div><button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button></div></div>
+    </div>
+
+    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    
-    <!-- App Logic (Module for Firebase v9+) -->
+    <!-- Core App Logic -->
     <script type="module" src="app.js"></script>
 </body>
 </html>

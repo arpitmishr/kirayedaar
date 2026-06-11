@@ -1546,7 +1546,7 @@ const initializeDatabaseSubscriptions = () => {
     state.unsubscribes.push(unsubHistory);
 };
 
-const setupNavigationEngine = () => {
+function setupNavigationEngine() {
     const triggers = document.querySelectorAll(".sidebar .nav-link, .sidebar-brand");
     triggers.forEach(trig => {
         trig.addEventListener("click", (e) => {
@@ -1563,9 +1563,9 @@ const setupNavigationEngine = () => {
             dom.sidebar.classList.add("active");
         });
     }
-};
+}
 
-const initializeApplicationSettings = () => {
+function initializeApplicationSettings() {
     const savedTheme = localStorage.getItem("propmanager_theme") || "light";
     document.documentElement.setAttribute("data-bs-theme", savedTheme);
     state.currentTheme = savedTheme;
@@ -1576,13 +1576,13 @@ const initializeApplicationSettings = () => {
         state.activityLog = JSON.parse(cachedLogs);
         renderActivityLog();
     }
-};
+}
 
-const mainAppBootloader = () => {
+function mainAppBootloader() {
     initializeApplicationSettings();
     setupNavigationEngine();
-     setupAuthObserver();
-};
+    setupAuthObserver();
+}
 
 if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", mainAppBootloader);
@@ -1655,15 +1655,13 @@ dom.btnLogout.addEventListener("click", async () => {
 });
 
 // Monitor Authentication State Transitions
-const setupAuthObserver = () => {
+function setupAuthObserver() {
     onAuthStateChanged(auth, (user) => {
         if (user) {
-            // User authenticated: hide login, show workspace, load data
             dom.loginScreen.classList.add("d-none");
             dom.userDisplayEmail.innerText = user.email;
             initializeDatabaseSubscriptions();
         } else {
-            // User unauthenticated: show login screen, clear stale data
             dom.loginScreen.classList.remove("d-none");
             state.rooms = [];
             state.tenants = [];
@@ -1677,4 +1675,4 @@ const setupAuthObserver = () => {
             renderHistory();
         }
     });
-};
+}

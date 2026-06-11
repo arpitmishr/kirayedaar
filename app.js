@@ -1,3 +1,4 @@
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
@@ -15,6 +16,9 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
 
+const auth = getAuth(app);
+
+// Update your existing state object to include these fields:
 const state = {
     rooms: [],
     tenants: [],
@@ -26,9 +30,9 @@ const state = {
     charts: {},
     currentTheme: "light",
     activeView: "dashboard",
-    compressedPhotoBase64: null
+    compressedPhotoBase64: null,
+    unsubscribes: [] // Stores firestore listeners to prevent unauthorized read attempts on logout
 };
-
 const dom = {
     sidebar: document.getElementById("sidebar"),
     sidebarToggle: document.getElementById("sidebar-toggle"),
@@ -151,6 +155,15 @@ const dom = {
     chkoutDues: document.getElementById("chkout_dues"),
     chkoutNotes: document.getElementById("chkout_notes"),
     receiptTemplate: document.getElementById("receiptTemplate")
+    
+    loginScreen: document.getElementById("login-screen"),
+    formLogin: document.getElementById("form-login"),
+    loginEmail: document.getElementById("login-email"),
+    loginPassword: document.getElementById("login-password"),
+    btnLoginSubmit: document.getElementById("btn-login-submit"),
+    btnToggleSignup: document.getElementById("btn-toggle-signup"),
+    btnLogout: document.getElementById("btn-logout"),
+    userDisplayEmail: document.getElementById("user-display-email"),
 };
 
 const instances = {
@@ -1465,6 +1478,11 @@ dom.btnConfirmAction.addEventListener("click", () => {
 const initializeDatabaseSubscriptions = () => {
     showLoader(true);
     let loadedWeight = 0;
+    
+    // Clear any active subscriptions before initiating new ones
+    state.unsubscribes.forEach(unsub => unsub());
+    state.unsubscribes = [];
+
     const checkSyncStatus = () => {
         loadedWeight++;
         if (loadedWeight >= 5) {
@@ -1474,53 +1492,58 @@ const initializeDatabaseSubscriptions = () => {
         }
     };
 
-    onSnapshot(collection(db, "rooms"), (snap) => {
+    const unsubRooms = onSnapshot(collection(db, "rooms"), (snap) => {
         state.rooms = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderRooms();
         syncRoomDropdowns();
         checkSyncStatus();
     }, (err) => {
-        showToast("Error synchronizing rooms database: " + err.message, "danger");
+        showToast("Error synchronizing rooms: " + err.message, "danger");
         checkSyncStatus();
     });
+    state.unsubscribes.push(unsubRooms);
 
-    onSnapshot(collection(db, "tenants"), (snap) => {
+    const unsubTenants = onSnapshot(collection(db, "tenants"), (snap) => {
         state.tenants = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderTenants();
         renderDocumentsView();
         syncTenantDropdowns();
         checkSyncStatus();
     }, (err) => {
-        showToast("Error synchronizing tenants database: " + err.message, "danger");
+        showToast("Error synchronizing tenants: " + err.message, "danger");
         checkSyncStatus();
     });
+    state.unsubscribes.push(unsubTenants);
 
-    onSnapshot(collection(db, "rent"), (snap) => {
+    const unsubRent = onSnapshot(collection(db, "rent"), (snap) => {
         state.rent = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderRent();
         checkSyncStatus();
     }, (err) => {
-        showToast("Error synchronizing rent database: " + err.message, "danger");
+        showToast("Error synchronizing rent: " + err.message, "danger");
         checkSyncStatus();
     });
+    state.unsubscribes.push(unsubRent);
 
-    onSnapshot(collection(db, "electricity"), (snap) => {
+    const unsubElec = onSnapshot(collection(db, "electricity"), (snap) => {
         state.electricity = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderElectricity();
         checkSyncStatus();
     }, (err) => {
-        showToast("Error synchronizing utility measurements: " + err.message, "danger");
+        showToast("Error synchronizing utilities: " + err.message, "danger");
         checkSyncStatus();
     });
+    state.unsubscribes.push(unsubElec);
 
-    onSnapshot(collection(db, "history"), (snap) => {
+    const unsubHistory = onSnapshot(collection(db, "history"), (snap) => {
         state.history = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderHistory();
         checkSyncStatus();
     }, (err) => {
-        showToast("Error synchronizing historical archives: " + err.message, "danger");
+        showToast("Error synchronizing history: " + err.message, "danger");
         checkSyncStatus();
     });
+    state.unsubscribes.push(unsubHistory);
 };
 
 const setupNavigationEngine = () => {
@@ -1558,7 +1581,7 @@ const initializeApplicationSettings = () => {
 const mainAppBootloader = () => {
     initializeApplicationSettings();
     setupNavigationEngine();
-    initializeDatabaseSubscriptions();
+     setupAuthObserver();
 };
 
 if (document.readyState === "loading") {
@@ -1566,3 +1589,92 @@ if (document.readyState === "loading") {
 } else {
     mainAppBootloader();
 }
+
+
+
+
+
+
+
+
+// =========================================================================
+// FIREBASE AUTHENTICATION HANDLERS
+// =========================================================================
+
+let isSignUpMode = false;
+
+// Toggle Login / Sign Up UI
+dom.btnToggleSignup.addEventListener("click", () => {
+    isSignUpMode = !isSignUpMode;
+    if (isSignUpMode) {
+        document.querySelector("#login-screen h3 + p").innerText = "Create an administrator account";
+        dom.btnLoginSubmit.innerText = "Register Administrator";
+        dom.btnToggleSignup.innerText = "Have an account? Sign In";
+    } else {
+        document.querySelector("#login-screen h3 + p").innerText = "Please sign in to access your portfolio";
+        dom.btnLoginSubmit.innerText = "Sign In";
+        dom.btnToggleSignup.innerText = "Don't have an account? Sign Up";
+    }
+});
+
+// Submit Email & Password (Login or Register)
+dom.formLogin.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = dom.loginEmail.value.trim();
+    const password = dom.loginPassword.value;
+    
+    showLoader(true);
+    try {
+        if (isSignUpMode) {
+            await createUserWithEmailAndPassword(auth, email, password);
+            showToast("Administrator registered successfully.");
+        } else {
+            await signInWithEmailAndPassword(auth, email, password);
+            showToast("Successfully authenticated.");
+        }
+    } catch (err) {
+        showToast(err.message, "danger");
+    }
+    showLoader(false);
+});
+
+// Logout Event Listener
+dom.btnLogout.addEventListener("click", async () => {
+    showLoader(true);
+    try {
+        // Unsubscribe from database listeners first to prevent permission-denied warnings
+        state.unsubscribes.forEach(unsub => unsub());
+        state.unsubscribes = [];
+        
+        await signOut(auth);
+        showToast("Logged out safely.");
+    } catch (err) {
+        showToast(err.message, "danger");
+    }
+    showLoader(false);
+});
+
+// Monitor Authentication State Transitions
+const setupAuthObserver = () => {
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            // User authenticated: hide login, show workspace, load data
+            dom.loginScreen.classList.add("d-none");
+            dom.userDisplayEmail.innerText = user.email;
+            initializeDatabaseSubscriptions();
+        } else {
+            // User unauthenticated: show login screen, clear stale data
+            dom.loginScreen.classList.remove("d-none");
+            state.rooms = [];
+            state.tenants = [];
+            state.rent = [];
+            state.electricity = [];
+            state.history = [];
+            renderRooms();
+            renderTenants();
+            renderRent();
+            renderElectricity();
+            renderHistory();
+        }
+    });
+};

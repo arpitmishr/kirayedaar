@@ -810,54 +810,60 @@ dom.formTenant.addEventListener("submit", async (e) => {
     const deposit = Number(dom.tenDeposit.value || 0);
     const gender = dom.tenGender.value;
     const status = dom.tenStatus.value;
-    if (!name || !phone || !aadhar || !roomId || !joinDate || !startDate || !endDate || !rent || !gender) {
-        showToast("Please fill in all mandatory fields.", "warning");
+
+    // Email, PAN, Agreement Start, and Agreement End dates are now completely optional!
+    if (!name || !phone || !aadhar || !roomId || !joinDate || !rent || !gender) {
+        showToast("Please fill in all mandatory fields (Name, Phone, Aadhar, Room, Joining Date, Rent, and Gender).", "warning");
         return;
     }
+
     const dup = state.tenants.find(t => t.aadhar === aadhar && t.id !== id);
     if (dup) {
         showToast("Aadhar number already linked with another tenant.", "danger");
         return;
     }
+
     showLoader(true);
     try {
         let photoUrl = null;
         if (id) {
             const currentTObj = state.tenants.find(x => x.id === id);
-            photoUrl = currentTObj ? currentTObj.photoUrl : null;
+            photoUrl = (currentTObj && currentTObj.photoUrl) ? currentTObj.photoUrl : null;
         }
         if (state.compressedPhotoBase64) {
             const photoRef = ref(storage, `tenants/${id || Math.random().toString(36).substring(2, 11)}.jpg`);
             await uploadString(photoRef, state.compressedPhotoBase64, "data_url");
             photoUrl = await getDownloadURL(photoRef);
         }
-        const data = {
+
+        // Prepare raw payload, ensuring any empty or optional field defaults cleanly to null instead of undefined
+        const rawData = {
             name,
-            fatherName: dom.tenFather.value.trim(),
-            motherName: dom.tenMother.value.trim(),
+            fatherName: dom.tenFather.value.trim() || null,
+            motherName: dom.tenMother.value.trim() || null,
             gender,
-            dob: dom.tenDob.value,
+            dob: dom.tenDob.value || null,
             aadhar,
-            pan: dom.tenPan.value.trim(),
-            passport: dom.tenPassport.value.trim(),
-            dl: dom.tenDl.value.trim(),
+            pan: dom.tenPan.value.trim() || null,
+            passport: dom.tenPassport.value.trim() || null,
+            dl: dom.tenDl.value.trim() || null,
             phone,
-            whatsapp: dom.tenWhatsapp.value.trim(),
-            email: dom.tenEmail.value.trim(),
-            emergName: dom.tenEmergName.value.trim(),
-            emergRel: dom.tenEmergRel.value.trim(),
-            occupation: dom.tenOccupation.value.trim(),
-            permAddr: dom.tenPermAddr.value.trim(),
-            currAddr: dom.tenCurrAddr.value.trim(),
+            whatsapp: dom.tenWhatsapp.value.trim() || null,
+            email: dom.tenEmail.value.trim() || null,
+            emergName: dom.tenEmergName.value.trim() || null,
+            emergRel: dom.tenEmergRel.value.trim() || null,
+            occupation: dom.tenOccupation.value.trim() || null,
+            permAddr: dom.tenPermAddr.value.trim() || null,
+            currAddr: dom.tenCurrAddr.value.trim() || null,
             roomId,
             joinDate,
-            startDate,
-            endDate,
+            startDate: startDate || null,
+            endDate: endDate || null,
             rent,
             deposit,
             status,
-            remarks: dom.tenRemarks.value.trim(),
-            photoUrl,
+            remarks: dom.tenRemarks.value.trim() || null,
+            photoUrl: photoUrl || null,
             docs: {
                 aadhar: dom.chkDocAadhar.checked,
                 pan: dom.chkDocPan.checked,
@@ -865,11 +871,19 @@ dom.formTenant.addEventListener("submit", async (e) => {
                 police: dom.chkDocPolice.checked
             }
         };
+
+        // Standardize document values to safeguard against Firestore's invalid field type exceptions
+        const cleanedData = {};
+        Object.keys(rawData).forEach(key => {
+            cleanedData[key] = rawData[key] === undefined ? null : rawData[key];
+        });
+
         const batchObj = writeBatch(db);
         let tenantRef = null;
+
         if (id) {
             tenantRef = doc(db, "tenants", id);
-            batchObj.update(tenantRef, data);
+            batchObj.update(tenantRef, cleanedData);
             const originalTenant = state.tenants.find(x => x.id === id);
             if (originalTenant && originalTenant.roomId !== roomId) {
                 if (originalTenant.roomId) {
@@ -883,12 +897,13 @@ dom.formTenant.addEventListener("submit", async (e) => {
             }
         } else {
             tenantRef = doc(collection(db, "tenants"));
-            batchObj.set(tenantRef, { ...data, createdAt: new Date().toISOString() });
+            batchObj.set(tenantRef, { ...cleanedData, createdAt: new Date().toISOString() });
             if (roomId) {
                 const roomRef = doc(db, "rooms", roomId);
                 batchObj.update(roomRef, { status: "Occupied" });
             }
         }
+
         await batchObj.commit();
         showToast(`Tenant profile ${name} committed to system database.`);
         logActivity(id ? "UPDATE" : "CREATE", `Tenant ${name} processed.`);

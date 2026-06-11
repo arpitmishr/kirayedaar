@@ -21,7 +21,7 @@
     <!-- App-Specific Embedded Style Shell (Strictly inline to prevent external file creation) -->
     <style>
         :root {
-            --transition-speed: 0.3s;
+            --transition-speed: 0.25s;
             --sidebar-width: 270px;
         }
 
@@ -29,6 +29,26 @@
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             background-color: #f8fafc;
             overflow-x: hidden;
+            letter-spacing: -0.01em;
+        }
+
+        /* Modernized Scrollbar Layouts */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 10px;
+        }
+        [data-bs-theme="dark"] ::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
         }
 
         /* Sidebar Styling */
@@ -41,14 +61,15 @@
             z-index: 1040;
             background-color: #0f172a;
             color: #f1f5f9;
-            transition: transform var(--transition-speed) ease;
+            transition: transform var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 4px 0 24px rgba(15, 23, 42, 0.15);
         }
 
         .sidebar .nav-link {
             color: #94a3b8;
-            padding: 12px 20px;
-            margin: 4px 12px;
-            border-radius: 8px;
+            padding: 12px 18px;
+            margin: 4px 16px;
+            border-radius: 10px;
             display: flex;
             align-items: center;
             gap: 12px;
@@ -56,14 +77,16 @@
             transition: all 0.2s ease;
         }
 
-        .sidebar .nav-link:hover, 
-        .sidebar .nav-link.active {
+        .sidebar .nav-link:hover {
             background-color: #1e293b;
             color: #f8fafc !important;
+            transform: translateX(4px);
         }
 
         .sidebar .nav-link.active {
             background-color: #2563eb;
+            color: #f8fafc !important;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
         }
 
         /* Main Workspace Panel */
@@ -72,7 +95,7 @@
             min-height: 100vh;
             display: flex;
             flex-direction: column;
-            transition: margin-left var(--transition-speed) ease;
+            transition: margin-left var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         @media (max-width: 992px) {
@@ -87,41 +110,108 @@
             }
         }
 
-        /* Utility Layouts */
+        /* Advanced Card States & Interactivity */
+        .card {
+            border-radius: 12px;
+            border: 1px solid rgba(226, 232, 240, 0.8);
+            transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        
+        [data-bs-theme="dark"] .card {
+            border-color: rgba(51, 65, 85, 0.5);
+        }
+
         .card-stat {
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
             cursor: pointer;
         }
 
         .card-stat:hover {
             transform: translateY(-4px);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 12px 20px -4px rgba(0, 0, 0, 0.05);
+            border-color: #2563eb;
         }
 
+        /* Table & Row Animations */
+        .table {
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        
+        .table tbody tr {
+            transition: background-color 0.15s ease, transform 0.15s ease;
+        }
+        
+        .table tbody tr:hover {
+            background-color: rgba(241, 245, 249, 0.6) !important;
+        }
+        
+        [data-bs-theme="dark"] .table tbody tr:hover {
+            background-color: rgba(30, 41, 59, 0.4) !important;
+        }
+
+        /* Profile Thumbnails & Components */
         .profile-photo-circle {
             width: 110px;
             height: 110px;
             object-fit: cover;
             border-radius: 50%;
-            border: 3px solid #e2e8f0;
+            border: 4px solid #fff;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease;
+        }
+        
+        .profile-photo-circle:hover {
+            transform: scale(1.05);
         }
 
+        .profile-thumb {
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            transition: transform 0.2s ease;
+        }
+        
+        .profile-thumb:hover {
+            transform: scale(1.1);
+        }
+
+        /* Modernized Form Control Accents */
+        .form-control, .form-select {
+            border-radius: 8px;
+            padding: 10px 14px;
+            border: 1px solid #cbd5e1;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        
+        [data-bs-theme="dark"] .form-control, 
+        [data-bs-theme="dark"] .form-select {
+            border-color: #475569;
+            background-color: #1e293b;
+            color: #f1f5f9;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.15);
+        }
+
+        /* Timeline / History Component */
         .timeline-item {
             position: relative;
-            padding-left: 24px;
+            padding-left: 28px;
             border-left: 2px solid #e2e8f0;
-            margin-bottom: 16px;
+            margin-bottom: 20px;
         }
 
         .timeline-item::before {
             content: "";
             position: absolute;
-            left: -6px;
+            left: -7px;
             top: 4px;
-            width: 10px;
-            height: 10px;
+            width: 12px;
+            height: 12px;
             border-radius: 50%;
             background-color: #2563eb;
+            border: 2px solid #fff;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
         }
 
         /* Print Media Definitions */
@@ -141,31 +231,30 @@
 </head>
 <body>
 
-
     <!-- ========================================================================= -->
-<!-- AUTHENTICATION LOGIN PORTAL OVERLAY                                       -->
-<!-- ========================================================================= -->
-<div id="login-screen" class="position-fixed top-0 start-0 w-100 h-100 bg-dark d-flex justify-content-center align-items-center" style="z-index: 1050; background-color: #0f172a !important;">
-    <div class="card p-4 shadow-lg border-0" style="width: 100%; max-width: 400px; background-color: #1e293b; color: #f1f5f9;">
-        <div class="text-center mb-4">
-            <h3 class="fw-bold text-white"><i class="bi bi-buildings-fill text-primary"></i> PropManager Pro</h3>
-            <p class="text-muted small">Please sign in to access your property portfolio</p>
+    <!-- AUTHENTICATION LOGIN PORTAL OVERLAY                                       -->
+    <!-- ========================================================================= -->
+    <div id="login-screen" class="position-fixed top-0 start-0 w-100 h-100 bg-dark d-flex justify-content-center align-items-center" style="z-index: 1050; background-color: #0f172a !important;">
+        <div class="card p-4 shadow-lg border-0" style="width: 100%; max-width: 400px; background-color: #1e293b; color: #f1f5f9;">
+            <div class="text-center mb-4">
+                <h3 class="fw-bold text-white"><i class="bi bi-buildings-fill text-primary"></i> PropManager Pro</h3>
+                <p class="text-muted small">Please sign in to access your property portfolio</p>
+            </div>
+            
+            <form id="form-login">
+                <div class="mb-3">
+                    <label class="form-label small text-secondary">Email Address</label>
+                    <input type="email" id="login-email" class="form-control bg-dark border-secondary text-white" placeholder="admin@property.com" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label small text-secondary">Password</label>
+                    <input type="password" id="login-password" class="form-control bg-dark border-secondary text-white" placeholder="••••••••" required>
+                </div>
+                <button type="submit" id="btn-login-submit" class="btn btn-primary w-100 mb-2 py-2">Sign In</button>
+                <button type="button" id="btn-toggle-signup" class="btn btn-link btn-sm w-100 text-decoration-none text-secondary">Don't have an account? Sign Up</button>
+            </form>
         </div>
-        
-        <form id="form-login">
-            <div class="mb-3">
-                <label class="form-label small text-secondary">Email Address</label>
-                <input type="email" id="login-email" class="form-control bg-dark border-secondary text-white" placeholder="admin@property.com" required>
-            </div>
-            <div class="mb-3">
-                <label class="form-label small text-secondary">Password</label>
-                <input type="password" id="login-password" class="form-control bg-dark border-secondary text-white" placeholder="••••••••" required>
-            </div>
-            <button type="submit" id="btn-login-submit" class="btn btn-primary w-100 mb-2 py-2">Sign In</button>
-            <button type="button" id="btn-toggle-signup" class="btn btn-link btn-sm w-100 text-decoration-none text-secondary">Don't have an account? Sign Up</button>
-        </form>
     </div>
-</div>
 
     <!-- ========================================================================= -->
     <!-- PRIMARY NAVIGATION SIDEBAR                                                -->
@@ -235,22 +324,20 @@
             </ul>
         </div>
         
-      <div class="p-3 border-top border-secondary bg-dark">
-    <div class="d-flex align-items-center justify-content-between">
-        <div class="d-flex align-items-center gap-2">
-            <div class="avatar bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 35px; height: 35px;">
-                <i class="bi bi-person-fill"></i>
-            </div>
-            <div>
-                <p class="m-0 text-white fw-semibold small" id="user-display-email" style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Admin</p>
-                <p class="m-0 text-muted" style="font-size: 10px;">Authenticated</p>
-            </div>
-        </div>
-        <button class="btn btn-sm btn-outline-danger px-2 py-1" id="btn-logout" title="Sign Out">
-            <i class="bi bi-box-arrow-right"></i>
-        </button>
-    </div>
-</div>
+        <div class="p-3 border-top border-secondary bg-dark">
+            <div class="d-flex align-items-center justify-content-between">
+                <div class="d-flex align-items-center gap-2">
+                    <div class="avatar bg-primary text-white rounded-circle d-flex align-items-center justify-content-center" style="width: 35px; height: 35px;">
+                        <i class="bi bi-person-fill"></i>
+                    </div>
+                    <div>
+                        <p class="m-0 text-white fw-semibold small" id="user-display-email" style="max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">Admin</p>
+                        <p class="m-0 text-muted" style="font-size: 10px;">Authenticated</p>
+                    </div>
+                </div>
+                <button class="btn btn-sm btn-outline-danger px-2 py-1" id="btn-logout" title="Sign Out">
+                    <i class="bi bi-box-arrow-right"></i>
+                </button>
             </div>
         </div>
     </aside>
@@ -517,39 +604,40 @@
             <!-- ================================================================= -->
             <!-- VIEW: RENT COLLECTION                                             -->
             <!-- ================================================================= -->
-
-<!-- Insert this card directly inside <section id="view-rent"> above the Rent Transaction card -->
-<div class="card border-0 shadow-sm bg-white p-4 mb-4">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h5 class="fw-bold m-0 text-dark">Cumulative Unpaid Rent Balances</h5>
-            <small class="text-muted">Calculated month-by-month starting from each tenant's join date to the current month</small>
-        </div>
-        <span class="badge rounded-pill px-3 py-2" id="cumulative-dues-badge">0 Tenants Overdue</span>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="table-light">
-                <tr class="small text-uppercase" style="font-size: 11px;">
-                    <th>Tenant Profile</th>
-                    <th>Room No</th>
-                    <th>Join Date</th>
-                    <th>Period Evaluated</th>
-                    <th>Total Rent Expected</th>
-                    <th>Total Rent Paid</th>
-                    <th class="text-danger fw-bold">Unpaid Dues</th>
-                    <th class="text-end pe-3">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="table-cumulative-dues-body">
-                <!-- Dynamically populated by JS -->
-            </tbody>
-        </table>
-    </div>
-</div>
-
-            
             <section id="view-rent" class="app-view d-none">
+                
+                <!-- Cumulative Unpaid Rent Balances Card (Properly inside its target parent section) -->
+                <div class="card border-0 shadow-sm mb-4" style="border-radius: 12px;">
+                    <div class="card-body p-4">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div>
+                                <h5 class="fw-bold m-0 text-dark">Cumulative Unpaid Rent Balances</h5>
+                                <small class="text-muted">Calculated month-by-month starting from each tenant's join date to the current month</small>
+                            </div>
+                            <span class="badge rounded-pill px-3 py-2" id="cumulative-dues-badge">0 Tenants Overdue</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr class="small text-uppercase" style="font-size: 11px;">
+                                        <th>Tenant Profile</th>
+                                        <th>Room No</th>
+                                        <th>Join Date</th>
+                                        <th>Period Evaluated</th>
+                                        <th>Total Rent Expected</th>
+                                        <th>Total Rent Paid</th>
+                                        <th class="text-danger fw-bold">Unpaid Dues</th>
+                                        <th class="text-end pe-3">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="table-cumulative-dues-body">
+                                    <!-- Dynamically populated by JS -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="card border-0 p-3 mb-4 shadow-sm bg-white">
                     <div class="row g-3 align-items-center">
                         <div class="col-12 col-md-4">
@@ -715,38 +803,6 @@
             <!-- VIEW: REPORTS & EXPORT SHELL                                      -->
             <!-- ================================================================= -->
             <section id="view-reports" class="app-view d-none">
-                <!-- Insert this card below the existing export row in <section id="view-reports"> -->
-<div class="card border-0 shadow-sm bg-white p-4 mt-4">
-    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-        <div>
-            <h5 class="fw-bold m-0 text-dark">Month-Wise Consolidated Dues Ledger</h5>
-            <small class="text-muted">Combined outstanding tenant balance including optional monthly utility billing</small>
-        </div>
-        <div class="d-flex align-items-center gap-2">
-            <label class="small text-muted fw-semibold mb-0" for="dues-ledger-month">Select Target Month:</label>
-            <input type="month" id="dues-ledger-month" class="form-control form-control-sm" style="width: 170px;">
-        </div>
-    </div>
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
-            <thead class="table-light">
-                <tr class="small text-uppercase" style="font-size: 11px;">
-                    <th>Tenant Profile</th>
-                    <th>Assigned Room</th>
-                    <th>Expected Rent</th>
-                    <th>Rent Paid</th>
-                    <th>Rent Outstanding</th>
-                    <th>Electricity Bill (Optional)</th>
-                    <th>Utility Status</th>
-                    <th class="text-danger fw-bold">Combined Dues</th>
-                </tr>
-            </thead>
-            <tbody id="table-dues-ledger-body">
-                <!-- Dynamically populated by JS -->
-            </tbody>
-        </table>
-    </div>
-</div>
                 <div class="row g-4">
                     <div class="col-md-6 col-lg-4">
                         <div class="card shadow-sm h-100 border-0 bg-white p-4 text-center">
@@ -771,6 +827,39 @@
                             <p class="text-muted small mb-4">Export entire Firestore cluster state into structured JSON file for emergency backups.</p>
                             <button class="btn btn-outline-primary w-100 py-2 mt-auto" onclick="exportBackupJSON()">Download Raw JSON</button>
                         </div>
+                    </div>
+                </div>
+
+                <!-- Month-Wise Consolidated Dues Ledger -->
+                <div class="card border-0 shadow-sm bg-white p-4 mt-4">
+                    <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+                        <div>
+                            <h5 class="fw-bold m-0 text-dark">Month-Wise Consolidated Dues Ledger</h5>
+                            <small class="text-muted">Combined outstanding tenant balance including optional monthly utility billing</small>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <label class="small text-muted fw-semibold mb-0" for="dues-ledger-month">Select Target Month:</label>
+                            <input type="month" id="dues-ledger-month" class="form-control form-control-sm" style="width: 170px;">
+                        </div>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-hover align-middle mb-0">
+                            <thead class="table-light">
+                                <tr class="small text-uppercase" style="font-size: 11px;">
+                                    <th>Tenant Profile</th>
+                                    <th>Assigned Room</th>
+                                    <th>Expected Rent</th>
+                                    <th>Rent Paid</th>
+                                    <th>Rent Outstanding</th>
+                                    <th>Electricity Bill (Optional)</th>
+                                    <th>Utility Status</th>
+                                    <th class="text-danger fw-bold">Combined Dues</th>
+                                </tr>
+                            </thead>
+                            <tbody id="table-dues-ledger-body">
+                                <!-- Dynamically populated by JS -->
+                            </tbody>
+                        </table>
                     </div>
                 </div>
             </section>
@@ -897,7 +986,7 @@
                         <!-- Tenant Profile Photo Shell -->
                         <div class="row mb-4">
                             <div class="col-12 text-center">
-                                <img src="https://via.placeholder.com/110" id="tenant-preview-image" class="profile-photo-circle mb-2" alt="Avatar">
+                                <img src="https://placehold.co/110" id="tenant-preview-image" class="profile-photo-circle mb-2" alt="Avatar">
                                 <div>
                                     <label class="btn btn-sm btn-outline-dark position-relative">
                                         <i class="bi bi-camera"></i> Change Photo
@@ -951,8 +1040,8 @@
                         <div class="row g-3 mb-4">
                             <div class="col-md-4"><label class="form-label small">Select Room To Assign*</label><select id="ten_room_id" class="form-select" required><option value="">No vacant rooms</option></select></div>
                             <div class="col-md-4"><label class="form-label small">Joining Date*</label><input type="date" id="ten_join_date" class="form-control" required></div>
-                            <div class="col-md-4"><label class="form-label small">Agreement Start Date</label><input type="date" id="ten_start_date" class="form-control" required></div>
-                            <div class="col-md-4"><label class="form-label small">Agreement End Date</label><input type="date" id="ten_end_date" class="form-control" required></div>
+                            <div class="col-md-4"><label class="form-label small">Agreement Start Date</label><input type="date" id="ten_start_date" class="form-control"></div>
+                            <div class="col-md-4"><label class="form-label small">Agreement End Date</label><input type="date" id="ten_end_date" class="form-control"></div>
                             <div class="col-md-4"><label class="form-label small">Monthly Rent Assigned (₹)*</label><input type="number" id="ten_rent" class="form-control" required></div>
                             <div class="col-md-4"><label class="form-label small">Security Deposit Collected (₹)</label><input type="number" id="ten_deposit" class="form-control"></div>
                             <div class="col-md-6">

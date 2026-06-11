@@ -1,7 +1,7 @@
-import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
 import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
 const firebaseConfig = {
     apiKey: "AIzaSyB-dS8rEXwAwfdpXQhwhLNhsQYq6ug3XWA",
@@ -15,10 +15,8 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 const storage = getStorage(app);
-
 const auth = getAuth(app);
 
-// Update your existing state object to include these fields:
 const state = {
     rooms: [],
     tenants: [],
@@ -31,8 +29,9 @@ const state = {
     currentTheme: "light",
     activeView: "dashboard",
     compressedPhotoBase64: null,
-    unsubscribes: [] // Stores firestore listeners to prevent unauthorized read attempts on logout
+    unsubscribes: []
 };
+
 const dom = {
     sidebar: document.getElementById("sidebar"),
     sidebarToggle: document.getElementById("sidebar-toggle"),
@@ -155,7 +154,6 @@ const dom = {
     chkoutDues: document.getElementById("chkout_dues"),
     chkoutNotes: document.getElementById("chkout_notes"),
     receiptTemplate: document.getElementById("receiptTemplate"),
-    
     loginScreen: document.getElementById("login-screen"),
     formLogin: document.getElementById("form-login"),
     loginEmail: document.getElementById("login-email"),
@@ -164,6 +162,8 @@ const dom = {
     btnToggleSignup: document.getElementById("btn-toggle-signup"),
     btnLogout: document.getElementById("btn-logout"),
     userDisplayEmail: document.getElementById("user-display-email"),
+    duesLedgerMonth: document.getElementById("dues-ledger-month"),
+    tableDuesLedgerBody: document.getElementById("table-dues-ledger-body")
 };
 
 const instances = {
@@ -246,6 +246,9 @@ const switchView = (targetView) => {
     dom.sidebar.classList.remove("active");
     if (targetView === "dashboard") {
         setTimeout(initCharts, 100);
+    }
+    if (targetView === "reports") {
+        renderDuesLedger();
     }
 };
 
@@ -330,19 +333,16 @@ const calculateDashboardStats = () => {
     const vacantRooms = state.rooms.filter(r => r.status === "Vacant").length;
     const maintenanceRooms = state.rooms.filter(r => r.status === "Maintenance").length;
     const activeTenants = state.tenants.filter(t => t.status === "Active").length;
-    
     let rentCollected = 0;
     state.rent.forEach(r => {
         rentCollected += Number(r.amountPaid || 0);
     });
-
     let depositsHeld = 0;
     state.tenants.forEach(t => {
         if (t.status === "Active" && t.deposit) {
             depositsHeld += Number(t.deposit || 0);
         }
     });
-
     let missingDocsCount = 0;
     state.tenants.forEach(t => {
         if (t.status === "Active" && t.docs) {
@@ -354,7 +354,6 @@ const calculateDashboardStats = () => {
         }
     });
 
-    // Calculate rent pending for the current month
     const currentMonthName = new Date().toLocaleString('default', { month: 'long' });
     const currentYear = new Date().getFullYear();
     let pendingRentCount = 0;
@@ -367,7 +366,6 @@ const calculateDashboardStats = () => {
         }
     });
 
-    // Calculate electricity bills pending
     const pendingElecCount = state.electricity.filter(e => e.status === "Pending").length;
 
     dom.dashTotalRooms.innerText = totalRooms;
@@ -403,7 +401,6 @@ const calculateDashboardStats = () => {
             }
         }
     });
-
     state.rooms.forEach(r => {
         if (r.status === "Maintenance") {
             state.alerts.push({
@@ -413,7 +410,6 @@ const calculateDashboardStats = () => {
             });
         }
     });
-
     dom.headerAlertCount.innerText = state.alerts.length;
     if (state.alerts.length === 0) {
         dom.headerAlertList.innerHTML = `<li class="p-2 border-bottom text-center"><small class="fw-bold">Notifications</small></li><li class="p-3 text-center text-muted"><small>No critical alerts active</small></li>`;
@@ -693,7 +689,7 @@ const renderTenants = (filterQuery = "", statusFilter = "") => {
         return `
             <tr>
                 <td class="ps-3">
-                    <img src="${t.photoUrl || 'https://via.placeholder.com/50'}" class="profile-thumb rounded-circle border" alt="Tenant Thumb" style="width:40px; height:40px; object-fit:cover;">
+                    <img src="${t.photoUrl || 'https://placehold.co/50'}" class="profile-thumb rounded-circle border" alt="Tenant Thumb" style="width:40px; height:40px; object-fit:cover;">
                 </td>
                 <td class="fw-bold text-dark">${t.name}</td>
                 <td>${room ? `Room ${room.number}` : '<span class="text-muted">Unassigned</span>'}</td>
@@ -720,7 +716,7 @@ const renderTenants = (filterQuery = "", statusFilter = "") => {
 window.openTenantModal = () => {
     dom.formTenant.reset();
     dom.tenantEditId.value = "";
-    dom.tenantPreviewImage.src = "https://via.placeholder.com/110";
+    dom.tenantPreviewImage.src = "https://placehold.co/110";
     state.compressedPhotoBase64 = null;
     syncRoomDropdowns();
     dom.tenRoomId.disabled = false;
@@ -732,7 +728,7 @@ window.editTenant = (id) => {
     if (!t) return;
     dom.formTenant.reset();
     dom.tenantEditId.value = t.id;
-    dom.tenantPreviewImage.src = t.photoUrl || "https://via.placeholder.com/110";
+    dom.tenantPreviewImage.src = t.photoUrl || "https://placehold.co/110";
     state.compressedPhotoBase64 = null;
     dom.tenName.value = t.name || "";
     dom.tenFather.value = t.fatherName || "";
@@ -791,7 +787,7 @@ dom.tenantPhotoInput.addEventListener("change", async (e) => {
 });
 
 dom.btnRemovePhoto.addEventListener("click", () => {
-    dom.tenantPreviewImage.src = "https://via.placeholder.com/110";
+    dom.tenantPreviewImage.src = "https://placehold.co/110";
     state.compressedPhotoBase64 = null;
     dom.tenantPhotoInput.value = "";
 });
@@ -811,7 +807,6 @@ dom.formTenant.addEventListener("submit", async (e) => {
     const gender = dom.tenGender.value;
     const status = dom.tenStatus.value;
 
-    // Agreement dates are completely optional
     if (!name || !phone || !aadhar || !roomId || !joinDate || !rent || !gender) {
         showToast("Please fill in all mandatory fields (Name, Phone, Aadhar, Room, Joining Date, Rent, and Gender).", "warning");
         return;
@@ -831,13 +826,10 @@ dom.formTenant.addEventListener("submit", async (e) => {
             photoUrl = (currentTObj && currentTObj.photoUrl) ? currentTObj.photoUrl : null;
         }
 
-        // Save the compressed base64 photo directly to Firestore.
-        // This eliminates slow storage uploads, making saving instantaneous!
         if (state.compressedPhotoBase64) {
             photoUrl = state.compressedPhotoBase64;
         }
 
-        // Clean values to prevent "undefined" Firestore crash errors
         const rawData = {
             name,
             fatherName: dom.tenFather.value.trim() || null,
@@ -1273,7 +1265,7 @@ const renderDocumentsView = () => {
             <tr>
                 <td>
                     <div class="d-flex align-items-center gap-3">
-                        <img src="${t.photoUrl || 'https://via.placeholder.com/40'}" class="rounded-circle border" width="35" height="35" style="object-fit:cover;">
+                        <img src="${t.photoUrl || 'https://placehold.co/40'}" class="rounded-circle border" width="35" height="35" style="object-fit:cover;">
                         <span class="fw-bold">${t.name}</span>
                     </div>
                 </td>
@@ -1494,7 +1486,6 @@ const initializeDatabaseSubscriptions = () => {
     showLoader(true);
     let loadedWeight = 0;
     
-    // Clear any active subscriptions before initiating new ones
     state.unsubscribes.forEach(unsub => unsub());
     state.unsubscribes = [];
 
@@ -1504,6 +1495,7 @@ const initializeDatabaseSubscriptions = () => {
             showLoader(false);
             calculateDashboardStats();
             initCharts();
+            renderDuesLedger();
         }
     };
 
@@ -1561,6 +1553,71 @@ const initializeDatabaseSubscriptions = () => {
     state.unsubscribes.push(unsubHistory);
 };
 
+function renderDuesLedger() {
+    if (!dom.tableDuesLedgerBody || !dom.duesLedgerMonth) return;
+    const selectedMonthVal = dom.duesLedgerMonth.value;
+    if (!selectedMonthVal) return;
+
+    const [yearStr, monthStr] = selectedMonthVal.split("-");
+    const selectedYear = Number(yearStr);
+    const monthsOrder = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const selectedMonthName = monthsOrder[parseInt(monthStr) - 1];
+
+    const activeTenants = state.tenants.filter(t => t.status === "Active" || t.status === "Notice Period");
+
+    if (activeTenants.length === 0) {
+        dom.tableDuesLedgerBody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted">No active tenant profiles loaded.</td></tr>`;
+        return;
+    }
+
+    dom.tableDuesLedgerBody.innerHTML = activeTenants.map(t => {
+        const room = state.rooms.find(r => r.id === t.roomId);
+        const expectedRent = Number(t.rent || 0);
+
+        const paidRentRecords = state.rent.filter(r => r.tenantId === t.id && r.month === selectedMonthName && Number(r.year) === selectedYear);
+        const paidRent = paidRentRecords.reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
+
+        const rentDue = Math.max(0, expectedRent - paidRent);
+
+        const elecBill = state.electricity.find(e => e.roomId === t.roomId && e.month === selectedMonthVal);
+        
+        let elecAmount = 0;
+        let elecStatusBadge = `<span class="badge bg-secondary bg-opacity-10 text-secondary">No Meter Bill</span>`;
+        let elecOutstanding = 0;
+
+        if (elecBill) {
+            elecAmount = Number(elecBill.totalAmount || 0);
+            if (elecBill.status === "Paid") {
+                elecStatusBadge = `<span class="badge bg-success bg-opacity-10 text-success">Paid</span>`;
+            } else {
+                elecStatusBadge = `<span class="badge bg-warning bg-opacity-10 text-warning">Pending</span>`;
+                elecOutstanding = elecAmount;
+            }
+        }
+
+        const combinedDues = rentDue + elecOutstanding;
+        const duesBadgeClass = combinedDues > 0 ? "text-danger fw-bold" : "text-success fw-bold";
+
+        return `
+            <tr>
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <img src="${t.photoUrl || 'https://placehold.co/40'}" class="rounded-circle border" width="30" height="30" style="object-fit:cover;">
+                        <span class="fw-bold text-dark">${t.name}</span>
+                    </div>
+                </td>
+                <td>${room ? `Room ${room.number}` : '<span class="text-muted">Unassigned</span>'}</td>
+                <td>${formatCurrency(expectedRent)}</td>
+                <td class="text-success">${formatCurrency(paidRent)}</td>
+                <td class="${rentDue > 0 ? 'text-danger fw-bold' : 'text-muted'}">${formatCurrency(rentDue)}</td>
+                <td>${elecBill ? formatCurrency(elecAmount) : '<span class="text-muted">N/A</span>'}</td>
+                <td>${elecStatusBadge}</td>
+                <td class="${duesBadgeClass}">${formatCurrency(combinedDues)}</td>
+            </tr>
+        `;
+    }).join("");
+}
+
 function setupNavigationEngine() {
     const triggers = document.querySelectorAll(".sidebar .nav-link, .sidebar-brand");
     triggers.forEach(trig => {
@@ -1591,34 +1648,17 @@ function initializeApplicationSettings() {
         state.activityLog = JSON.parse(cachedLogs);
         renderActivityLog();
     }
+    if (dom.duesLedgerMonth) {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        dom.duesLedgerMonth.value = `${year}-${month}`;
+        dom.duesLedgerMonth.addEventListener("change", renderDuesLedger);
+    }
 }
-
-function mainAppBootloader() {
-    initializeApplicationSettings();
-    setupNavigationEngine();
-    setupAuthObserver();
-}
-
-if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", mainAppBootloader);
-} else {
-    mainAppBootloader();
-}
-
-
-
-
-
-
-
-
-// =========================================================================
-// FIREBASE AUTHENTICATION HANDLERS
-// =========================================================================
 
 let isSignUpMode = false;
 
-// Toggle Login / Sign Up UI
 dom.btnToggleSignup.addEventListener("click", () => {
     isSignUpMode = !isSignUpMode;
     if (isSignUpMode) {
@@ -1632,19 +1672,18 @@ dom.btnToggleSignup.addEventListener("click", () => {
     }
 });
 
-// Submit Email & Password (Login or Register)
 dom.formLogin.addEventListener("submit", async (e) => {
     e.preventDefault();
     const email = dom.loginEmail.value.trim();
-    const password = dom.loginPassword.value;
+    const password = dom.loginPassword;
     
     showLoader(true);
     try {
         if (isSignUpMode) {
-            await createUserWithEmailAndPassword(auth, email, password);
+            await createUserWithEmailAndPassword(auth, email, password.value);
             showToast("Administrator registered successfully.");
         } else {
-            await signInWithEmailAndPassword(auth, email, password);
+            await signInWithEmailAndPassword(auth, email, password.value);
             showToast("Successfully authenticated.");
         }
     } catch (err) {
@@ -1653,14 +1692,11 @@ dom.formLogin.addEventListener("submit", async (e) => {
     showLoader(false);
 });
 
-// Logout Event Listener
 dom.btnLogout.addEventListener("click", async () => {
     showLoader(true);
     try {
-        // Unsubscribe from database listeners first to prevent permission-denied warnings
         state.unsubscribes.forEach(unsub => unsub());
         state.unsubscribes = [];
-        
         await signOut(auth);
         showToast("Logged out safely.");
     } catch (err) {
@@ -1669,7 +1705,6 @@ dom.btnLogout.addEventListener("click", async () => {
     showLoader(false);
 });
 
-// Monitor Authentication State Transitions
 function setupAuthObserver() {
     onAuthStateChanged(auth, (user) => {
         if (user) {
@@ -1690,4 +1725,16 @@ function setupAuthObserver() {
             renderHistory();
         }
     });
+}
+
+function mainAppBootloader() {
+    initializeApplicationSettings();
+    setupNavigationEngine();
+    setupAuthObserver();
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", mainAppBootloader);
+} else {
+    mainAppBootloader();
 }

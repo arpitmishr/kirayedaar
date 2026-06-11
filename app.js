@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, writeBatch } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
 import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
 
 const firebaseConfig = {
@@ -34,7 +34,6 @@ const dom = {
     sidebarToggle: document.getElementById("sidebar-toggle"),
     themeToggler: document.getElementById("theme-toggler"),
     pageHeaderTitle: document.getElementById("page-header-title"),
-    appContainer: document.getElementById("app-container"),
     viewPort: document.getElementById("view-port"),
     appSpinner: document.getElementById("app-spinner"),
     systemToast: document.getElementById("systemToast"),
@@ -318,16 +317,19 @@ const calculateDashboardStats = () => {
     const vacantRooms = state.rooms.filter(r => r.status === "Vacant").length;
     const maintenanceRooms = state.rooms.filter(r => r.status === "Maintenance").length;
     const activeTenants = state.tenants.filter(t => t.status === "Active").length;
+    
     let rentCollected = 0;
     state.rent.forEach(r => {
         rentCollected += Number(r.amountPaid || 0);
     });
+
     let depositsHeld = 0;
     state.tenants.forEach(t => {
         if (t.status === "Active" && t.deposit) {
             depositsHeld += Number(t.deposit || 0);
         }
     });
+
     let missingDocsCount = 0;
     state.tenants.forEach(t => {
         if (t.status === "Active" && t.docs) {
@@ -338,14 +340,34 @@ const calculateDashboardStats = () => {
             }
         }
     });
+
+    // Calculate rent pending for the current month
+    const currentMonthName = new Date().toLocaleString('default', { month: 'long' });
+    const currentYear = new Date().getFullYear();
+    let pendingRentCount = 0;
+    state.tenants.forEach(t => {
+        if (t.status === "Active") {
+            const hasPaid = state.rent.some(r => r.tenantId === t.id && r.month === currentMonthName && Number(r.year) === currentYear);
+            if (!hasPaid) {
+                pendingRentCount++;
+            }
+        }
+    });
+
+    // Calculate electricity bills pending
+    const pendingElecCount = state.electricity.filter(e => e.status === "Pending").length;
+
     dom.dashTotalRooms.innerText = totalRooms;
     dom.dashOccupiedRooms.innerText = occupiedRooms;
     dom.dashVacantRooms.innerText = vacantRooms;
     dom.dashMaintenanceRooms.innerText = maintenanceRooms;
     dom.dashActiveTenants.innerText = activeTenants;
+    dom.dashRentPending.innerText = pendingRentCount;
+    dom.dashElecPending.innerText = pendingElecCount;
     dom.dashDepositsHeld.innerText = formatCurrency(depositsHeld);
     dom.dashMonthlyIncome.innerText = formatCurrency(rentCollected);
     dom.dashMissingDocs.innerText = missingDocsCount;
+
     state.alerts = [];
     const today = new Date();
     state.tenants.forEach(t => {
@@ -368,6 +390,7 @@ const calculateDashboardStats = () => {
             }
         }
     });
+
     state.rooms.forEach(r => {
         if (r.status === "Maintenance") {
             state.alerts.push({
@@ -377,6 +400,7 @@ const calculateDashboardStats = () => {
             });
         }
     });
+
     dom.headerAlertCount.innerText = state.alerts.length;
     if (state.alerts.length === 0) {
         dom.headerAlertList.innerHTML = `<li class="p-2 border-bottom text-center"><small class="fw-bold">Notifications</small></li><li class="p-3 text-center text-muted"><small>No critical alerts active</small></li>`;
@@ -835,16 +859,22 @@ dom.formTenant.addEventListener("submit", async (e) => {
             batchObj.update(tenantRef, data);
             const originalTenant = state.tenants.find(x => x.id === id);
             if (originalTenant && originalTenant.roomId !== roomId) {
-                const oldRoomRef = doc(db, "rooms", originalTenant.roomId);
-                batchObj.update(oldRoomRef, { status: "Vacant" });
-                const newRoomRef = doc(db, "rooms", roomId);
-                batchObj.update(newRoomRef, { status: "Occupied" });
+                if (originalTenant.roomId) {
+                    const oldRoomRef = doc(db, "rooms", originalTenant.roomId);
+                    batchObj.update(oldRoomRef, { status: "Vacant" });
+                }
+                if (roomId) {
+                    const newRoomRef = doc(db, "rooms", roomId);
+                    batchObj.update(newRoomRef, { status: "Occupied" });
+                }
             }
         } else {
             tenantRef = doc(collection(db, "tenants"));
             batchObj.set(tenantRef, { ...data, createdAt: new Date().toISOString() });
-            const roomRef = doc(db, "rooms", roomId);
-            batchObj.update(roomRef, { status: "Occupied" });
+            if (roomId) {
+                const roomRef = doc(db, "rooms", roomId);
+                batchObj.update(roomRef, { status: "Occupied" });
+            }
         }
         await batchObj.commit();
         showToast(`Tenant profile ${name} committed to system database.`);
@@ -854,7 +884,7 @@ dom.formTenant.addEventListener("submit", async (e) => {
         showToast(err.message, "danger");
     }
     showLoader(false);
-};
+});
 
 dom.searchTenantsInput.addEventListener("input", (e) => {
     renderTenants(e.target.value, dom.filterTenantsStatus.value);
@@ -908,7 +938,7 @@ dom.formCheckout.addEventListener("submit", async (e) => {
             phone: tObj.phone,
             aadhar: tObj.aadhar,
             roomId: tObj.roomId,
-            roomNumber: state.rooms.find(r => r.id === tObj.roomId)?.number || "N/A",
+            roomNumber: tObj.roomId ? (state.rooms.find(r => r.id === tObj.roomId)?.number || "N/A") : "N/A",
             checkoutDate: finalDate,
             damageDeductions: damageVal,
             cleaningDeductions: cleaningVal,
@@ -942,9 +972,10 @@ const renderRent = () => {
     dom.tableRentBody.innerHTML = filtered.map(r => {
         const tenant = state.tenants.find(t => t.id === r.tenantId);
         const room = state.rooms.find(rm => rm.id === r.roomId);
+        const dateFormatted = r.timestamp ? new Date(r.timestamp).toLocaleDateString() : "N/A";
         return `
             <tr>
-                <td class="ps-3">${new Date(r.timestamp).toLocaleDateString()}</td>
+                <td class="ps-3">${dateFormatted}</td>
                 <td class="fw-bold text-dark">${tenant ? tenant.name : '<span class="text-muted">Deleted Tenant</span>'}</td>
                 <td>${room ? `Room ${room.number}` : '<span class="text-muted">Deleted</span>'}</td>
                 <td>${r.month} ${r.year}</td>
@@ -973,7 +1004,7 @@ window.printReceipt = (id) => {
     document.getElementById("pr-tenant-phone").innerText = tenant ? tenant.phone : "N/A";
     document.getElementById("pr-room-no").innerText = room ? room.number : "N/A";
     document.getElementById("pr-receipt-id").innerText = rentObj.id.toUpperCase();
-    document.getElementById("pr-date").innerText = new Date(rentObj.timestamp).toLocaleDateString();
+    document.getElementById("pr-date").innerText = rentObj.timestamp ? new Date(rentObj.timestamp).toLocaleDateString() : "N/A";
     document.getElementById("pr-month-paid").innerText = `${rentObj.month} ${rentObj.year}`;
     document.getElementById("pr-subtotal-rent").innerText = formatCurrency(rentObj.amountPaid);
     document.getElementById("pr-subtotal-discount").innerText = formatCurrency(rentObj.discount || 0);
@@ -1008,6 +1039,12 @@ window.deleteRentRecord = (id) => {
         }
         showLoader(false);
     });
+};
+
+window.openRentModal = () => {
+    dom.formRent.reset();
+    syncTenantDropdowns();
+    instances.modalRent.show();
 };
 
 dom.formRent.addEventListener("submit", async (e) => {
@@ -1255,8 +1292,10 @@ window.restoreHistoryRecord = (id) => {
             const batchObj = writeBatch(db);
             const tenantRef = doc(db, "tenants", hist.tenantId);
             batchObj.update(tenantRef, { status: "Active", roomId: hist.roomId });
-            const roomRef = doc(db, "rooms", hist.roomId);
-            batchObj.update(roomRef, { status: "Occupied" });
+            if (hist.roomId) {
+                const roomRef = doc(db, "rooms", hist.roomId);
+                batchObj.update(roomRef, { status: "Occupied" });
+            }
             const histRef = doc(db, "history", id);
             batchObj.delete(histRef);
             await batchObj.commit();
@@ -1434,34 +1473,54 @@ const initializeDatabaseSubscriptions = () => {
             initCharts();
         }
     };
+
     onSnapshot(collection(db, "rooms"), (snap) => {
         state.rooms = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderRooms();
         syncRoomDropdowns();
         checkSyncStatus();
-    }, (err) => showToast(err.message, "danger"));
+    }, (err) => {
+        showToast("Error synchronizing rooms database: " + err.message, "danger");
+        checkSyncStatus();
+    });
+
     onSnapshot(collection(db, "tenants"), (snap) => {
         state.tenants = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderTenants();
         renderDocumentsView();
         syncTenantDropdowns();
         checkSyncStatus();
-    }, (err) => showToast(err.message, "danger"));
+    }, (err) => {
+        showToast("Error synchronizing tenants database: " + err.message, "danger");
+        checkSyncStatus();
+    });
+
     onSnapshot(collection(db, "rent"), (snap) => {
         state.rent = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderRent();
         checkSyncStatus();
-    }, (err) => showToast(err.message, "danger"));
+    }, (err) => {
+        showToast("Error synchronizing rent database: " + err.message, "danger");
+        checkSyncStatus();
+    });
+
     onSnapshot(collection(db, "electricity"), (snap) => {
         state.electricity = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderElectricity();
         checkSyncStatus();
-    }, (err) => showToast(err.message, "danger"));
+    }, (err) => {
+        showToast("Error synchronizing utility measurements: " + err.message, "danger");
+        checkSyncStatus();
+    });
+
     onSnapshot(collection(db, "history"), (snap) => {
         state.history = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         renderHistory();
         checkSyncStatus();
-    }, (err) => showToast(err.message, "danger"));
+    }, (err) => {
+        showToast("Error synchronizing historical archives: " + err.message, "danger");
+        checkSyncStatus();
+    });
 };
 
 const setupNavigationEngine = () => {
@@ -1475,6 +1534,12 @@ const setupNavigationEngine = () => {
             }
         });
     });
+
+    if (dom.sidebarToggle) {
+        dom.sidebarToggle.addEventListener("click", () => {
+            dom.sidebar.classList.add("active");
+        });
+    }
 };
 
 const initializeApplicationSettings = () => {
@@ -1496,4 +1561,8 @@ const mainAppBootloader = () => {
     initializeDatabaseSubscriptions();
 };
 
-document.addEventListener("DOMContentLoaded", mainAppBootloader);
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", mainAppBootloader);
+} else {
+    mainAppBootloader();
+}

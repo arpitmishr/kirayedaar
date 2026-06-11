@@ -517,6 +517,38 @@
             <!-- ================================================================= -->
             <!-- VIEW: RENT COLLECTION                                             -->
             <!-- ================================================================= -->
+
+<!-- Insert this card directly inside <section id="view-rent"> above the Rent Transaction card -->
+<div class="card border-0 shadow-sm bg-white p-4 mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h5 class="fw-bold m-0 text-dark">Cumulative Unpaid Rent Balances</h5>
+            <small class="text-muted">Calculated month-by-month starting from each tenant's join date to the current month</small>
+        </div>
+        <span class="badge rounded-pill px-3 py-2" id="cumulative-dues-badge">0 Tenants Overdue</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr class="small text-uppercase" style="font-size: 11px;">
+                    <th>Tenant Profile</th>
+                    <th>Room No</th>
+                    <th>Join Date</th>
+                    <th>Period Evaluated</th>
+                    <th>Total Rent Expected</th>
+                    <th>Total Rent Paid</th>
+                    <th class="text-danger fw-bold">Unpaid Dues</th>
+                    <th class="text-end pe-3">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="table-cumulative-dues-body">
+                <!-- Dynamically populated by JS -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+            
             <section id="view-rent" class="app-view d-none">
                 <div class="card border-0 p-3 mb-4 shadow-sm bg-white">
                     <div class="row g-3 align-items-center">

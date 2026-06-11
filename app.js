@@ -154,7 +154,7 @@ const dom = {
     chkoutCleaning: document.getElementById("chkout_cleaning"),
     chkoutDues: document.getElementById("chkout_dues"),
     chkoutNotes: document.getElementById("chkout_notes"),
-    receiptTemplate: document.getElementById("receiptTemplate")
+    receiptTemplate: document.getElementById("receiptTemplate"),
     
     loginScreen: document.getElementById("login-screen"),
     formLogin: document.getElementById("form-login"),

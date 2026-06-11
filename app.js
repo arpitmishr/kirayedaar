@@ -163,7 +163,9 @@ const dom = {
     btnLogout: document.getElementById("btn-logout"),
     userDisplayEmail: document.getElementById("user-display-email"),
     duesLedgerMonth: document.getElementById("dues-ledger-month"),
-    tableDuesLedgerBody: document.getElementById("table-dues-ledger-body")
+    tableDuesLedgerBody: document.getElementById("table-dues-ledger-body"),
+    cumulativeDuesBadge: document.getElementById("cumulative-dues-badge"),
+    tableCumulativeDuesBody: document.getElementById("table-cumulative-dues-body")
 };
 
 const instances = {
@@ -249,6 +251,10 @@ const switchView = (targetView) => {
     }
     if (targetView === "reports") {
         renderDuesLedger();
+    }
+    if (targetView === "rent") {
+        renderRent();
+        renderCumulativeDues();
     }
 };
 
@@ -1496,6 +1502,7 @@ const initializeDatabaseSubscriptions = () => {
             calculateDashboardStats();
             initCharts();
             renderDuesLedger();
+            renderCumulativeDues();
         }
     };
 
@@ -1617,6 +1624,143 @@ function renderDuesLedger() {
         `;
     }).join("");
 }
+
+function renderCumulativeDues() {
+    if (!dom.tableCumulativeDuesBody) return;
+    
+    const activeTenants = state.tenants.filter(t => t.status === "Active" || t.status === "Notice Period");
+    const monthsOrder = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth(); // 0-11
+
+    let overdueCount = 0;
+
+    if (activeTenants.length === 0) {
+        dom.tableCumulativeDuesBody.innerHTML = `<tr><td colspan="8" class="text-center py-4 text-muted">No active tenant profiles loaded.</td></tr>`;
+        if (dom.cumulativeDuesBadge) {
+            dom.cumulativeDuesBadge.innerText = "0 Tenants Overdue";
+            dom.cumulativeDuesBadge.className = "badge bg-success rounded-pill px-3 py-2";
+        }
+        return;
+    }
+
+    dom.tableCumulativeDuesBody.innerHTML = activeTenants.map(t => {
+        const room = state.rooms.find(r => r.id === t.roomId);
+        
+        if (!t.joinDate) {
+            return `
+                <tr>
+                    <td class="fw-bold text-dark">${t.name}</td>
+                    <td>${room ? `Room ${room.number}` : 'N/A'}</td>
+                    <td colspan="5" class="text-muted text-center small py-3">Missing join date inside this tenant's profile. Please update profile.</td>
+                    <td></td>
+                </tr>
+            `;
+        }
+
+        const join = new Date(t.joinDate);
+        if (isNaN(join.getTime())) {
+            return `
+                <tr>
+                    <td class="fw-bold text-dark">${t.name}</td>
+                    <td>${room ? `Room ${room.number}` : 'N/A'}</td>
+                    <td colspan="5" class="text-muted text-center small py-3">Invalid join date format.</td>
+                    <td></td>
+                </tr>
+            `;
+        }
+
+        const startYear = join.getFullYear();
+        const startMonth = join.getMonth();
+        
+        let totalExpected = 0;
+        let totalPaid = 0;
+        let monthsCount = 0;
+
+        let y = startYear;
+        let m = startMonth;
+
+        while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+            monthsCount++;
+            const monthName = monthsOrder[m];
+            totalExpected += Number(t.rent || 0);
+
+            const paidThisMonth = state.rent
+                .filter(r => r.tenantId === t.id && r.month === monthName && Number(r.year) === y)
+                .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
+            
+            totalPaid += paidThisMonth;
+
+            m++;
+            if (m > 11) {
+                m = 0;
+                y++;
+            }
+        }
+
+        const cumulativeDue = Math.max(0, totalExpected - totalPaid);
+        if (cumulativeDue > 0) {
+            overdueCount++;
+        }
+
+        const joinMonthStr = join.toLocaleString('default', { month: 'short' });
+        const currMonthStr = today.toLocaleString('default', { month: 'short' });
+        const periodStr = `${joinMonthStr} ${startYear} – ${currMonthStr} ${currentYear} (${monthsCount} mos)`;
+        const dueClass = cumulativeDue > 0 ? "text-danger fw-bold" : "text-success fw-bold";
+
+        return `
+            <tr>
+                <td>
+                    <div class="d-flex align-items-center gap-2">
+                        <img src="${t.photoUrl || 'https://placehold.co/40'}" class="rounded-circle border" width="30" height="30" style="object-fit:cover;">
+                        <span class="fw-bold text-dark">${t.name}</span>
+                    </div>
+                </td>
+                <td>${room ? `Room ${room.number}` : '<span class="text-muted">Unassigned</span>'}</td>
+                <td>${join.toLocaleDateString()}</td>
+                <td><small class="text-secondary">${periodStr}</small></td>
+                <td>${formatCurrency(totalExpected)}</td>
+                <td class="text-success">${formatCurrency(totalPaid)}</td>
+                <td class="${dueClass}">${formatCurrency(cumulativeDue)}</td>
+                <td class="text-end pe-3">
+                    ${cumulativeDue > 0 ? `
+                        <button class="btn btn-sm btn-success d-inline-flex align-items-center gap-1" onclick="collectTenantDues('${t.id}', ${cumulativeDue})">
+                            <i class="bi bi-cash-coin"></i> Collect
+                        </button>
+                    ` : `
+                        <span class="badge bg-success bg-opacity-10 text-success py-1 px-2"><i class="bi bi-check-circle-fill"></i> Cleared</span>
+                    `}
+                </td>
+            </tr>
+        `;
+    }).join("");
+
+    if (dom.cumulativeDuesBadge) {
+        dom.cumulativeDuesBadge.innerText = `${overdueCount} Tenant${overdueCount === 1 ? '' : 's'} Overdue`;
+        dom.cumulativeDuesBadge.className = `badge rounded-pill px-3 py-2 ${overdueCount > 0 ? 'bg-danger' : 'bg-success'}`;
+    }
+}
+
+window.collectTenantDues = (tenantId, amount) => {
+    dom.formRent.reset();
+    syncTenantDropdowns();
+    
+    if (dom.rentTenantId) {
+        dom.rentTenantId.value = tenantId;
+    }
+    
+    const today = new Date();
+    const currentMonthName = today.toLocaleString('default', { month: 'long' });
+    const currentYear = today.getFullYear();
+
+    if (dom.rentMonth) dom.rentMonth.value = currentMonthName;
+    if (dom.rentYear) dom.rentYear.value = currentYear;
+    if (dom.rentAmountPaid) dom.rentAmountPaid.value = amount;
+
+    instances.modalRent.show();
+};
 
 function setupNavigationEngine() {
     const triggers = document.querySelectorAll(".sidebar .nav-link, .sidebar-brand");

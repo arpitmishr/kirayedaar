@@ -804,14 +804,14 @@ dom.formTenant.addEventListener("submit", async (e) => {
     const aadhar = dom.tenAadhar.value.trim();
     const roomId = dom.tenRoomId.value;
     const joinDate = dom.tenJoinDate.value;
-    const startDate = dom.tenStartDate.value;
-    const endDate = dom.tenEndDate.value;
+    const startDate = dom.tenStartDate.value || null;
+    const endDate = dom.tenEndDate.value || null;
     const rent = Number(dom.tenRent.value || 0);
     const deposit = Number(dom.tenDeposit.value || 0);
     const gender = dom.tenGender.value;
     const status = dom.tenStatus.value;
 
-    // Email, PAN, Agreement Start, and Agreement End dates are now completely optional!
+    // Agreement dates are completely optional
     if (!name || !phone || !aadhar || !roomId || !joinDate || !rent || !gender) {
         showToast("Please fill in all mandatory fields (Name, Phone, Aadhar, Room, Joining Date, Rent, and Gender).", "warning");
         return;
@@ -830,13 +830,14 @@ dom.formTenant.addEventListener("submit", async (e) => {
             const currentTObj = state.tenants.find(x => x.id === id);
             photoUrl = (currentTObj && currentTObj.photoUrl) ? currentTObj.photoUrl : null;
         }
+
+        // Save the compressed base64 photo directly to Firestore.
+        // This eliminates slow storage uploads, making saving instantaneous!
         if (state.compressedPhotoBase64) {
-            const photoRef = ref(storage, `tenants/${id || Math.random().toString(36).substring(2, 11)}.jpg`);
-            await uploadString(photoRef, state.compressedPhotoBase64, "data_url");
-            photoUrl = await getDownloadURL(photoRef);
+            photoUrl = state.compressedPhotoBase64;
         }
 
-        // Prepare raw payload, ensuring any empty or optional field defaults cleanly to null instead of undefined
+        // Clean values to prevent "undefined" Firestore crash errors
         const rawData = {
             name,
             fatherName: dom.tenFather.value.trim() || null,
@@ -857,13 +858,13 @@ dom.formTenant.addEventListener("submit", async (e) => {
             currAddr: dom.tenCurrAddr.value.trim() || null,
             roomId,
             joinDate,
-            startDate: startDate || null,
-            endDate: endDate || null,
+            startDate: startDate,
+            endDate: endDate,
             rent,
             deposit,
             status,
             remarks: dom.tenRemarks.value.trim() || null,
-            photoUrl: photoUrl || null,
+            photoUrl: photoUrl,
             docs: {
                 aadhar: dom.chkDocAadhar.checked,
                 pan: dom.chkDocPan.checked,
@@ -872,7 +873,6 @@ dom.formTenant.addEventListener("submit", async (e) => {
             }
         };
 
-        // Standardize document values to safeguard against Firestore's invalid field type exceptions
         const cleanedData = {};
         Object.keys(rawData).forEach(key => {
             cleanedData[key] = rawData[key] === undefined ? null : rawData[key];
@@ -905,11 +905,11 @@ dom.formTenant.addEventListener("submit", async (e) => {
         }
 
         await batchObj.commit();
-        showToast(`Tenant profile ${name} committed to system database.`);
+        showToast(`Tenant profile ${name} saved successfully.`);
         logActivity(id ? "UPDATE" : "CREATE", `Tenant ${name} processed.`);
         instances.modalTenant.hide();
     } catch (err) {
-        showToast(err.message, "danger");
+        showToast("Error saving tenant: " + err.message, "danger");
     }
     showLoader(false);
 });

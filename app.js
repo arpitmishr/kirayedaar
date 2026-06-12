@@ -165,7 +165,12 @@ const dom = {
     duesLedgerMonth: document.getElementById("dues-ledger-month"),
     tableDuesLedgerBody: document.getElementById("table-dues-ledger-body"),
     cumulativeDuesBadge: document.getElementById("cumulative-dues-badge"),
-    tableCumulativeDuesBody: document.getElementById("table-cumulative-dues-body")
+    tableCumulativeDuesBody: document.getElementById("table-cumulative-dues-body"),
+    
+    // Detailed Profile Elements
+    modalTenantDetail: document.getElementById("modalTenantDetail"),
+    tenantDetailModalBody: document.getElementById("tenant-detail-modal-body"),
+    btnDetailEditTenant: document.getElementById("btn-detail-edit-tenant")
 };
 
 const instances = {
@@ -175,7 +180,8 @@ const instances = {
     modalRent: new bootstrap.Modal(dom.modalRent),
     modalElectricity: new bootstrap.Modal(dom.modalElectricity),
     modalCheckout: new bootstrap.Modal(dom.modalCheckout),
-    confirmationModal: new bootstrap.Modal(dom.confirmationModal)
+    confirmationModal: new bootstrap.Modal(dom.confirmationModal),
+    modalTenantDetail: new bootstrap.Modal(dom.modalTenantDetail)
 };
 
 const showLoader = (show) => {
@@ -693,11 +699,11 @@ const renderTenants = (filterQuery = "", statusFilter = "") => {
         else if (percentage > 0) progressClass = "bg-warning";
         const endDateFormatted = t.endDate ? new Date(t.endDate).toLocaleDateString() : "N/A";
         return `
-            <tr>
+            <tr style="cursor: pointer;" onclick="viewTenantDetails('${t.id}')">
                 <td class="ps-3">
                     <img src="${t.photoUrl || 'https://placehold.co/50'}" class="profile-thumb rounded-circle border" alt="Tenant Thumb" style="width:40px; height:40px; object-fit:cover;">
                 </td>
-                <td class="fw-bold text-dark">${t.name}</td>
+                <td class="fw-bold text-dark text-primary text-decoration-underline">${t.name}</td>
                 <td>${room ? `Room ${room.number}` : '<span class="text-muted">Unassigned</span>'}</td>
                 <td>${t.phone || "N/A"}</td>
                 <td>
@@ -710,13 +716,239 @@ const renderTenants = (filterQuery = "", statusFilter = "") => {
                 </td>
                 <td>${endDateFormatted}</td>
                 <td><span class="badge ${badgeClass}">${t.status}</span></td>
-                <td class="text-end pe-3">
-                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="editTenant('${t.id}')"><i class="bi bi-pencil-fill"></i></button>
-                    ${t.status === 'Active' || t.status === 'Notice Period' ? `<button class="btn btn-sm btn-outline-danger" onclick="checkoutTenant('${t.id}')"><i class="bi bi-box-arrow-right"></i></button>` : ""}
+                <td class="text-end pe-3" onclick="event.stopPropagation();">
+                    <button class="btn btn-sm btn-outline-info me-1" onclick="viewTenantDetails('${t.id}')" title="View Details"><i class="bi bi-eye-fill"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="editTenant('${t.id}')" title="Edit Profile"><i class="bi bi-pencil-fill"></i></button>
+                    ${t.status === 'Active' || t.status === 'Notice Period' ? `<button class="btn btn-sm btn-outline-danger" onclick="checkoutTenant('${t.id}')" title="Checkout"><i class="bi bi-box-arrow-right"></i></button>` : ""}
                 </td>
             </tr>
         `;
     }).join("");
+};
+
+window.viewTenantDetails = (id) => {
+    const t = state.tenants.find(x => x.id === id);
+    if (!t) return;
+
+    const room = state.rooms.find(r => r.id === t.roomId);
+    
+    const today = new Date();
+    const currentYear = today.getFullYear();
+    const currentMonth = today.getMonth();
+    const monthsOrder = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const currentMonthName = monthsOrder[currentMonth];
+
+    let totalExpected = 0;
+    let totalPaid = 0;
+    let monthsCount = 0;
+    let currentMonthExpectedRent = Number(t.rent || 0);
+    let currentMonthRentPaid = 0;
+
+    if (t.joinDate) {
+        const join = new Date(t.joinDate);
+        if (!isNaN(join.getTime())) {
+            let y = join.getFullYear();
+            let m = join.getMonth();
+
+            while (y < currentYear || (y === currentYear && m <= currentMonth)) {
+                monthsCount++;
+                const monthName = monthsOrder[m];
+                totalExpected += Number(t.rent || 0);
+
+                const paidThisMonth = state.rent
+                    .filter(r => r.tenantId === t.id && r.month === monthName && Number(r.year) === y)
+                    .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
+                
+                totalPaid += paidThisMonth;
+
+                if (y === currentYear && m === currentMonth) {
+                    currentMonthRentPaid = paidThisMonth;
+                }
+
+                m++;
+                if (m > 11) {
+                    m = 0;
+                    y++;
+                }
+            }
+        }
+    }
+
+    const cumulativeRentDue = Math.max(0, totalExpected - totalPaid);
+    const currentMonthRentDue = Math.max(0, currentMonthExpectedRent - currentMonthRentPaid);
+
+    const paymentsLog = state.rent.filter(r => r.tenantId === t.id)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+        
+    const electricLog = state.electricity.filter(e => e.roomId === t.roomId)
+        .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+    const d = t.docs || {};
+    const docBadge = (status) => status 
+        ? `<span class="badge bg-success-subtle text-success border border-success"><i class="bi bi-check-circle-fill"></i> Verified</span>` 
+        : `<span class="badge bg-danger-subtle text-danger border border-danger"><i class="bi bi-x-circle-fill"></i> Pending</span>`;
+
+    let modalHTML = `
+        <div class="row g-4">
+            <div class="col-12 col-lg-4 text-center border-end">
+                <img src="${t.photoUrl || 'https://placehold.co/150'}" class="img-fluid rounded-circle border p-1 mb-3" style="width:150px; height:150px; object-fit:cover;">
+                <h4 class="fw-bold text-dark mb-1">${t.name}</h4>
+                <p class="text-muted small mb-2"><i class="bi bi-hash"></i> Room Reference: ${room ? `Room ${room.number}` : 'Unassigned'}</p>
+                <span class="badge ${t.status === 'Active' ? 'bg-success' : 'bg-secondary'} px-3 py-1.5 fs-7 mb-3">${t.status}</span>
+                
+                <div class="bg-light p-3 rounded border text-start mt-2">
+                    <h6 class="fw-bold text-dark border-bottom pb-2 mb-2">Finance Status Summary</h6>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="small text-muted">Current Month Dues (${currentMonthName}):</span>
+                        <span class="small fw-bold ${currentMonthRentDue > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(currentMonthRentDue)}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="small text-muted">Cumulative Rent Due:</span>
+                        <span class="small fw-bold ${cumulativeRentDue > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(cumulativeRentDue)}</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="small text-muted">Security Deposit:</span>
+                        <span class="small fw-bold text-secondary">${formatCurrency(t.deposit || 0)}</span>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="small text-muted">Assigned Rent Rate:</span>
+                        <span class="small fw-bold text-dark">${formatCurrency(t.rent || 0)} / mo</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-8">
+                <ul class="nav nav-pills gap-2 border-bottom pb-2 mb-3" id="tenantDetailTabs" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active small py-1.5 px-3" data-bs-toggle="tab" data-bs-target="#tab-personal">Profile Info</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link small py-1.5 px-3" data-bs-toggle="tab" data-bs-target="#tab-documents">Compliance Docs</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link small py-1.5 px-3" data-bs-toggle="tab" data-bs-target="#tab-payments">Payment History (${paymentsLog.length})</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link small py-1.5 px-3" data-bs-toggle="tab" data-bs-target="#tab-utilities">Utilities Log (${electricLog.length})</button>
+                    </li>
+                </ul>
+
+                <div class="tab-content" id="tenantDetailTabsContent">
+                    <div class="tab-pane fade show active" id="tab-personal">
+                        <h6 class="fw-bold mb-3 text-primary">Personal & Identification Credentials</h6>
+                        <div class="row g-3 mb-4">
+                            <div class="col-md-6"><span class="text-muted d-block small">Father's Name</span><strong>${t.fatherName || 'N/A'}</strong></div>
+                            <div class="col-md-6"><span class="text-muted d-block small">Mother's Name</span><strong>${t.motherName || 'N/A'}</strong></div>
+                            <div class="col-md-6"><span class="text-muted d-block small">Gender / DOB</span><strong>${t.gender || 'N/A'} ${t.dob ? `(${t.dob})` : ''}</strong></div>
+                            <div class="col-md-6"><span class="text-muted d-block small">Occupation</span><strong>${t.occupation || 'N/A'}</strong></div>
+                            <div class="col-md-6"><span class="text-muted d-block small">Aadhar Card</span><code>${t.aadhar || 'N/A'}</code></div>
+                            <div class="col-md-6"><span class="text-muted d-block small">PAN Card</span><code>${t.pan || 'N/A'}</code></div>
+                            <div class="col-md-6"><span class="text-muted d-block small">Passport / DL</span><strong>${t.passport || 'N/A'} / ${t.dl || 'N/A'}</strong></div>
+                        </div>
+
+                        <h6 class="fw-bold mb-3 text-primary">Lease & Contact References</h6>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6"><span class="text-muted d-block small">Mobile / Whatsapp</span><strong>${t.phone || 'N/A'} ${t.whatsapp ? `/ ${t.whatsapp}` : ''}</strong></div>
+                            <div class="col-md-6"><span class="text-muted d-block small">Email Address</span><strong>${t.email || 'N/A'}</strong></div>
+                            <div class="col-md-6"><span class="text-muted d-block small">Emergency Contact / Relation</span><strong>${t.emergName || 'N/A'} (${t.emergRel || 'N/A'})</strong></div>
+                            <div class="col-md-6"><span class="text-muted d-block small">Join Date / Contract End</span><strong>${t.joinDate ? new Date(t.joinDate).toLocaleDateString() : 'N/A'} – ${t.endDate ? new Date(t.endDate).toLocaleDateString() : 'No Limit'}</strong></div>
+                            <div class="col-12"><span class="text-muted d-block small">Permanent Address</span><p class="mb-1 text-dark small">${t.permAddr || 'N/A'}</p></div>
+                            <div class="col-12"><span class="text-muted d-block small">Current Address</span><p class="mb-0 text-dark small">${t.currAddr || 'N/A'}</p></div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="tab-documents">
+                        <h6 class="fw-bold mb-3 text-primary">Verification Checklist Summary</h6>
+                        <div class="list-group border-0">
+                            <div class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0 border-0 border-bottom py-2">
+                                <span><i class="bi bi-card-text text-muted me-2"></i> Aadhar Verification Status</span>
+                                ${docBadge(d.aadhar)}
+                            </div>
+                            <div class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0 border-0 border-bottom py-2">
+                                <span><i class="bi bi-credit-card-2-front text-muted me-2"></i> PAN Verification Status</span>
+                                ${docBadge(d.pan)}
+                            </div>
+                            <div class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0 border-0 border-bottom py-2">
+                                <span><i class="bi bi-journal-bookmark-fill text-muted me-2"></i> Signed Lease Agreement</span>
+                                ${docBadge(d.agreement)}
+                            </div>
+                            <div class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0 border-0 border-bottom py-2">
+                                <span><i class="bi bi-shield-check text-muted me-2"></i> Police Verification Filed</span>
+                                ${docBadge(d.police)}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="tab-payments">
+                        <h6 class="fw-bold mb-3 text-primary">Logged Rent Payment History</h6>
+                        <div class="table-responsive" style="max-height: 250px;">
+                            <table class="table table-sm table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr style="font-size:11px;">
+                                        <th>Date</th>
+                                        <th>Month / Year</th>
+                                        <th>Amount Received</th>
+                                        <th>Mode</th>
+                                        <th>Reference ID</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${paymentsLog.length === 0 ? `<tr><td colspan="5" class="text-center py-4 text-muted">No historic rent payments recorded.</td></tr>` : paymentsLog.map(p => `
+                                        <tr>
+                                            <td>${p.timestamp ? new Date(p.timestamp).toLocaleDateString() : 'N/A'}</td>
+                                            <td><strong>${p.month} ${p.year}</strong></td>
+                                            <td class="text-success fw-bold">${formatCurrency(p.amountPaid)}</td>
+                                            <td><span class="badge bg-secondary">${p.mode}</span></td>
+                                            <td><code>${p.transactionNo || 'N/A'}</code></td>
+                                        </tr>
+                                    `).join("")}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="tab-pane fade" id="tab-utilities">
+                        <h6 class="fw-bold mb-3 text-primary">Electricity Utility History</h6>
+                        <div class="table-responsive" style="max-height: 250px;">
+                            <table class="table table-sm table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr style="font-size:11px;">
+                                        <th>Billing Month</th>
+                                        <th>Readings (Prev / Curr)</th>
+                                        <th>Consumed</th>
+                                        <th>Amount Due</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    ${electricLog.length === 0 ? `<tr><td colspan="5" class="text-center py-4 text-muted">No electricity records registered.</td></tr>` : electricLog.map(e => `
+                                        <tr>
+                                            <td><strong>${e.month}</strong></td>
+                                            <td>${e.prevReading} / ${e.currReading}</td>
+                                            <td>${e.unitsConsumed} Units</td>
+                                            <td class="fw-bold text-danger">${formatCurrency(e.totalAmount)}</td>
+                                            <td><span class="badge ${e.status === 'Paid' ? 'bg-success' : 'bg-warning text-dark'}">${e.status}</span></td>
+                                        </tr>
+                                    `).join("")}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    dom.tenantDetailModalBody.innerHTML = modalHTML;
+    
+    dom.btnDetailEditTenant.onclick = () => {
+        instances.modalTenantDetail.hide();
+        setTimeout(() => {
+            editTenant(id);
+        }, 350);
+    };
+
+    instances.modalTenantDetail.show();
 };
 
 window.openTenantModal = () => {

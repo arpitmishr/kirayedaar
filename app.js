@@ -366,8 +366,9 @@ const calculateDashboardStats = () => {
         }
     });
 
-    const currentMonthName = new Date().toLocaleString('default', { month: 'long' });
-    const currentYear = new Date().getFullYear();
+    const today = new Date();
+    const currentMonthName = today.toLocaleString('default', { month: 'long' });
+    const currentYear = today.getFullYear();
     let pendingRentCount = 0;
     state.tenants.forEach(t => {
         if (t.status === "Active") {
@@ -391,37 +392,85 @@ const calculateDashboardStats = () => {
     dom.dashMonthlyIncome.innerText = formatCurrency(rentCollected);
     dom.dashMissingDocs.innerText = missingDocsCount;
 
+    // --- ALERTS COMPILATION ENGINE ---
     state.alerts = [];
-    const today = new Date();
+    
     state.tenants.forEach(t => {
-        if (t.status === "Active" && t.endDate) {
-            const end = new Date(t.endDate);
-            const diffTime = end - today;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            if (diffDays <= 30 && diffDays >= 0) {
-                state.alerts.push({
-                    type: "warning",
-                    title: "Lease Expiring Soon",
-                    description: `Tenant ${t.name} (Room ${state.rooms.find(r => r.id === t.roomId)?.number || "N/A"}) lease expires in ${diffDays} days.`
-                });
-            } else if (diffDays < 0) {
+        if (t.status === "Active" || t.status === "Notice Period") {
+            const roomObj = state.rooms.find(r => r.id === t.roomId);
+            const roomLabel = roomObj ? `Room ${roomObj.number}` : "N/A";
+
+            // 1. Lease Agreement Expiration Alerts
+            if (t.endDate) {
+                const end = new Date(t.endDate);
+                const diffTime = end - today;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays <= 30 && diffDays >= 0) {
+                    state.alerts.push({
+                        type: "warning",
+                        title: "Lease Expiring Soon",
+                        description: `Tenant ${t.name} (${roomLabel}) lease expires in ${diffDays} days.`
+                    });
+                } else if (diffDays < 0) {
+                    state.alerts.push({
+                        type: "danger",
+                        title: "Lease Overdue",
+                        description: `Tenant ${t.name} (${roomLabel}) lease expired on ${end.toLocaleDateString()}.`
+                    });
+                }
+            }
+
+            // 2. Unpaid Current Month Rent Alerts
+            const paidThisMonth = state.rent.some(r => r.tenantId === t.id && r.month === currentMonthName && Number(r.year) === currentYear);
+            if (!paidThisMonth) {
                 state.alerts.push({
                     type: "danger",
-                    title: "Lease Overdue",
-                    description: `Tenant ${t.name} (Room ${state.rooms.find(r => r.id === t.roomId)?.number || "N/A"}) lease expired on ${end.toLocaleDateString()}.`
+                    title: "Rent Overdue",
+                    description: `Tenant ${t.name} (${roomLabel}) has not paid rent for ${currentMonthName} ${currentYear}.`
+                });
+            }
+
+            // 3. Document Compliance Alerts
+            const docObj = t.docs || {};
+            const missingDocsList = [];
+            if (!docObj.aadhar) missingDocsList.push("Aadhar");
+            if (!docObj.pan) missingDocsList.push("PAN");
+            if (!docObj.agreement) missingDocsList.push("Lease Agreement");
+            if (!docObj.police) missingDocsList.push("Police Verification");
+            
+            if (missingDocsList.length > 0) {
+                state.alerts.push({
+                    type: "warning",
+                    title: "Compliance Gap",
+                    description: `${t.name} (${roomLabel}) is missing: ${missingDocsList.join(", ")}.`
                 });
             }
         }
     });
+
+    // 4. Room Maintenance Active Status Alerts
     state.rooms.forEach(r => {
         if (r.status === "Maintenance") {
             state.alerts.push({
                 type: "secondary",
-                title: "Room Under Maintenance",
-                description: `Room ${r.number} is marked as under active maintenance.`
+                title: "Maintenance",
+                description: `Room ${r.number} is actively offline for structural maintenance.`
             });
         }
     });
+
+    // 5. Unpaid Utility Bills Alerts
+    state.electricity.forEach(e => {
+        if (e.status === "Pending") {
+            const targetRoom = state.rooms.find(r => r.id === e.roomId);
+            state.alerts.push({
+                type: "warning",
+                title: "Pending Utility Bill",
+                description: `Room ${targetRoom ? targetRoom.number : "N/A"} has a pending bill of ${formatCurrency(e.totalAmount)} for ${e.month}.`
+            });
+        }
+    });
+
     dom.headerAlertCount.innerText = state.alerts.length;
     if (state.alerts.length === 0) {
         dom.headerAlertList.innerHTML = `<li class="p-2 border-bottom text-center"><small class="fw-bold">Notifications</small></li><li class="p-3 text-center text-muted"><small>No critical alerts active</small></li>`;
@@ -884,7 +933,7 @@ window.viewTenantDetails = (id) => {
                                 ${docBadge(d.agreement)}
                             </div>
                             <div class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0 border-0 border-bottom py-2">
-                                <span><i class="bi bi-shield-check text-muted me-2"></i> Police Verification Filed</span>
+                                <span><i class="bi bi-text-indent-left text-muted me-2"></i> Police Verification Filed</span>
                                 ${docBadge(d.police)}
                             </div>
                         </div>
@@ -956,6 +1005,9 @@ window.viewTenantDetails = (id) => {
     `;
 
     dom.tenantDetailModalBody.innerHTML = modalHTML;
+    
+    dom.btnDetailEditTenant.innerHTML = `<i class="bi bi-pencil"></i> Edit Profile`;
+    dom.btnDetailEditTenant.className = "btn btn-primary";
     
     dom.btnDetailEditTenant.onclick = () => {
         instances.modalTenantDetail.hide();
@@ -1342,7 +1394,7 @@ const calculateProratedValues = () => {
 
 window.applyCheckoutAutoDues = (amount) => {
     dom.chkoutDues.value = amount;
-    showToast(`Applied ₹${amount} to unpaid dues.`);
+    showToast(`Applied ${formatCurrency(amount)} to unpaid dues.`);
 };
 
 dom.chkoutDate.addEventListener("change", calculateProratedValues);
@@ -1702,25 +1754,121 @@ const renderDocumentsView = () => {
 const renderHistory = (qStr = "") => {
     if (!dom.tableHistoryBody) return;
     let records = [...state.history];
+    
+    // --- DYNAMIC SUMMARY METRICS CALCULATOR ---
+    const totalPastCount = records.length;
+    const totalDamages = records.reduce((sum, r) => sum + Number(r.damageDeductions || 0), 0);
+    const totalCleaning = records.reduce((sum, r) => sum + Number(r.cleaningDeductions || 0), 0);
+    const totalOtherDues = records.reduce((sum, r) => sum + Number(r.otherDues || 0), 0);
+    const totalSettlements = totalDamages + totalCleaning + totalOtherDues;
+
+    let statsDiv = document.getElementById("history-stats-strip");
+    if (!statsDiv) {
+        statsDiv = document.createElement("div");
+        statsDiv.id = "history-stats-strip";
+        statsDiv.className = "row g-3 mb-4";
+        const searchBarCard = dom.searchHistoryInput.closest(".card");
+        if (searchBarCard) {
+            searchBarCard.parentNode.insertBefore(statsDiv, searchBarCard.nextSibling);
+        }
+    }
+
+    statsDiv.innerHTML = `
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm p-3 bg-white text-center">
+                <span class="text-muted small">Checked-Out Profiles</span>
+                <h4 class="fw-bold text-dark m-0 mt-1">${totalPastCount} Past Tenants</h4>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm p-3 bg-white text-center">
+                <span class="text-muted small">Total Damage Charges</span>
+                <h4 class="fw-bold text-danger m-0 mt-1">${formatCurrency(totalDamages)}</h4>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="card border-0 shadow-sm p-3 bg-white text-center">
+                <span class="text-muted small">Total Offboarding Recoveries</span>
+                <h4 class="fw-bold text-success m-0 mt-1">${formatCurrency(totalSettlements)}</h4>
+            </div>
+        </div>
+    `;
+
     if (qStr) {
         records = records.filter(r => r.tenantName.toLowerCase().includes(qStr.toLowerCase()) || r.roomNumber.toLowerCase().includes(qStr.toLowerCase()));
     }
+    
     records.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     dom.tableHistoryBody.innerHTML = records.map(r => {
+        const totalExitCharges = (r.damageDeductions || 0) + (r.cleaningDeductions || 0) + (r.otherDues || 0);
         return `
-            <tr>
-                <td class="ps-3 fw-bold">${r.tenantName}</td>
+            <tr style="cursor: pointer;" onclick="viewHistoryDetails('${r.id}')">
+                <td class="ps-3 fw-bold text-primary text-decoration-underline">${r.tenantName}</td>
                 <td><code>${r.aadhar}</code></td>
                 <td>Room ${r.roomNumber}</td>
                 <td>${new Date(r.checkoutDate).toLocaleDateString()}</td>
-                <td class="fw-bold text-danger">${formatCurrency(r.damageDeductions + r.cleaningDeductions + r.otherDues)}</td>
+                <td class="fw-bold text-danger">${formatCurrency(totalExitCharges)}</td>
                 <td><code>${r.id ? r.id.substring(0, 10).toUpperCase() : "N/A"}</code></td>
-                <td class="text-end pe-3">
-                    <button class="btn btn-sm btn-outline-secondary" onclick="restoreHistoryRecord('${r.id}')"><i class="bi bi-arrow-counterclockwise"></i> Restore</button>
+                <td class="text-end pe-3" onclick="event.stopPropagation();">
+                    <button class="btn btn-sm btn-outline-info me-1" onclick="viewHistoryDetails('${r.id}')" title="View Details"><i class="bi bi-eye-fill"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary" onclick="restoreHistoryRecord('${r.id}')" title="Restore Tenant"><i class="bi bi-arrow-counterclockwise"></i> Restore</button>
                 </td>
             </tr>
         `;
     }).join("") || `<tr><td colspan="7" class="text-center py-5 text-muted">History archive is empty.</td></tr>`;
+};
+
+window.viewHistoryDetails = (id) => {
+    const h = state.history.find(x => x.id === id);
+    if (!h) return;
+
+    const totalBill = (h.damageDeductions || 0) + (h.cleaningDeductions || 0) + (h.otherDues || 0);
+
+    let detailsHTML = `
+        <div class="row g-3 text-dark">
+            <div class="col-12 text-center border-bottom pb-3">
+                <div class="avatar bg-secondary text-white rounded-circle d-inline-flex align-items-center justify-content-center mb-2" style="width: 70px; height: 70px;">
+                    <i class="bi bi-person-fill fs-2"></i>
+                </div>
+                <h4 class="fw-bold mb-0">${h.tenantName}</h4>
+                <span class="badge bg-secondary mt-1">Archived Exit File</span>
+            </div>
+            
+            <div class="col-md-6"><span class="text-muted small d-block">Aadhar / ID Number:</span><strong>${h.aadhar || 'N/A'}</strong></div>
+            <div class="col-md-6"><span class="text-muted small d-block">Mobile Reference:</span><strong>${h.phone || 'N/A'}</strong></div>
+            <div class="col-md-6"><span class="text-muted small d-block">Room Assigned at Exit:</span><strong>Room ${h.roomNumber || 'N/A'}</strong></div>
+            <div class="col-md-6"><span class="text-muted small d-block">Checkout Date:</span><strong>${h.checkoutDate ? new Date(h.checkoutDate).toLocaleDateString() : 'N/A'}</strong></div>
+            
+            <div class="col-12 border-top pt-3">
+                <h6 class="fw-bold text-danger"><i class="bi bi-receipt"></i> Offboarding Settlement Deductions</h6>
+                <div class="row g-2 bg-light p-3 rounded border">
+                    <div class="col-md-4"><span class="text-muted d-block small">Damage Deductions:</span><strong>${formatCurrency(h.damageDeductions || 0)}</strong></div>
+                    <div class="col-md-4"><span class="text-muted d-block small">Cleaning Deductions:</span><strong>${formatCurrency(h.cleaningDeductions || 0)}</strong></div>
+                    <div class="col-md-4"><span class="text-muted d-block small">Other Outstanding Dues:</span><strong>${formatCurrency(h.otherDues || 0)}</strong></div>
+                    <div class="col-12 border-top pt-2 mt-2">
+                        <span class="text-muted d-block small">Total Deduction Charge:</span>
+                        <h5 class="fw-bold text-danger mb-0">${formatCurrency(totalBill)}</h5>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 border-top pt-3"><span class="text-muted small d-block">Final Recorded Electricity Reading:</span><strong>${h.finalElectricityReading || 0} kWh</strong></div>
+            <div class="col-12"><span class="text-muted small d-block">Offboarding Settlement Notes:</span><p class="mb-0 text-muted italic p-2 bg-light rounded">${h.notes || 'No checkout notes provided.'}</p></div>
+        </div>
+    `;
+
+    dom.tenantDetailModalBody.innerHTML = detailsHTML;
+    
+    dom.btnDetailEditTenant.innerHTML = `<i class="bi bi-arrow-counterclockwise"></i> Restore Profile`;
+    dom.btnDetailEditTenant.className = "btn btn-success";
+    dom.btnDetailEditTenant.onclick = () => {
+        instances.modalTenantDetail.hide();
+        setTimeout(() => {
+            restoreHistoryRecord(id);
+        }, 350);
+    };
+
+    instances.modalTenantDetail.show();
 };
 
 window.restoreHistoryRecord = (id) => {

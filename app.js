@@ -3,9 +3,6 @@ import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot
 import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
-// =========================================================================
-// 1. CONFIGURATION & STATE INITIALIZATION
-// =========================================================================
 const firebaseConfig = {
     apiKey: "AIzaSyB-dS8rEXwAwfdpXQhwhLNhsQYq6ug3XWA",
     authDomain: "tenant-75f84.firebaseapp.com",
@@ -35,9 +32,6 @@ const state = {
     unsubscribes: []
 };
 
-// =========================================================================
-// 2. DOM INTERFACE SELECTORS
-// =========================================================================
 const dom = {
     sidebar: document.getElementById("sidebar"),
     sidebarToggle: document.getElementById("sidebar-toggle"),
@@ -172,14 +166,24 @@ const dom = {
     tableDuesLedgerBody: document.getElementById("table-dues-ledger-body"),
     cumulativeDuesBadge: document.getElementById("cumulative-dues-badge"),
     tableCumulativeDuesBody: document.getElementById("table-cumulative-dues-body"),
+    
+    // Detailed Profile Elements
     modalTenantDetail: document.getElementById("modalTenantDetail"),
     tenantDetailModalBody: document.getElementById("tenant-detail-modal-body"),
     btnDetailEditTenant: document.getElementById("btn-detail-edit-tenant")
 };
 
-// =========================================================================
-// 3. AUXILIARY INTERFACE & CORE BUSINESS UTILITIES
-// =========================================================================
+const instances = {
+    toast: new bootstrap.Toast(dom.systemToast),
+    modalRoom: new bootstrap.Modal(dom.modalRoom),
+    modalTenant: new bootstrap.Modal(dom.modalTenant),
+    modalRent: new bootstrap.Modal(dom.modalRent),
+    modalElectricity: new bootstrap.Modal(dom.modalElectricity),
+    modalCheckout: new bootstrap.Modal(dom.modalCheckout),
+    confirmationModal: new bootstrap.Modal(dom.confirmationModal),
+    modalTenantDetail: new bootstrap.Modal(dom.modalTenantDetail)
+};
+
 const showLoader = (show) => {
     if (show) {
         dom.appSpinner.classList.remove("d-none");
@@ -335,9 +339,254 @@ const syncRoomDropdowns = () => {
     }).join("");
 };
 
-// =========================================================================
-// 4. PROPERTY INVENTORY CRUD (ROOMS)
-// =========================================================================
+const calculateDashboardStats = () => {
+    const totalRooms = state.rooms.length;
+    const occupiedRooms = state.rooms.filter(r => r.status === "Occupied").length;
+    const vacantRooms = state.rooms.filter(r => r.status === "Vacant").length;
+    const maintenanceRooms = state.rooms.filter(r => r.status === "Maintenance").length;
+    const activeTenants = state.tenants.filter(t => t.status === "Active").length;
+    let rentCollected = 0;
+    state.rent.forEach(r => {
+        rentCollected += Number(r.amountPaid || 0);
+    });
+    let depositsHeld = 0;
+    state.tenants.forEach(t => {
+        if (t.status === "Active" && t.deposit) {
+            depositsHeld += Number(t.deposit || 0);
+        }
+    });
+    let missingDocsCount = 0;
+    state.tenants.forEach(t => {
+        if (t.status === "Active" && t.docs) {
+            const checklist = t.docs;
+            const completed = Object.values(checklist).filter(v => v === true).length;
+            if (completed < 4) {
+                missingDocsCount++;
+            }
+        }
+    });
+
+    const today = new Date();
+    const currentMonthName = today.toLocaleString('default', { month: 'long' });
+    const currentYear = today.getFullYear();
+    let pendingRentCount = 0;
+    state.tenants.forEach(t => {
+        if (t.status === "Active") {
+            const hasPaid = state.rent.some(r => r.tenantId === t.id && r.month === currentMonthName && Number(r.year) === currentYear);
+            if (!hasPaid) {
+                pendingRentCount++;
+            }
+        }
+    });
+
+    const pendingElecCount = state.electricity.filter(e => e.status === "Pending").length;
+
+    dom.dashTotalRooms.innerText = totalRooms;
+    dom.dashOccupiedRooms.innerText = occupiedRooms;
+    dom.dashVacantRooms.innerText = vacantRooms;
+    dom.dashMaintenanceRooms.innerText = maintenanceRooms;
+    dom.dashActiveTenants.innerText = activeTenants;
+    dom.dashRentPending.innerText = pendingRentCount;
+    dom.dashElecPending.innerText = pendingElecCount;
+    dom.dashDepositsHeld.innerText = formatCurrency(depositsHeld);
+    dom.dashMonthlyIncome.innerText = formatCurrency(rentCollected);
+    dom.dashMissingDocs.innerText = missingDocsCount;
+
+    // --- ALERTS COMPILATION ENGINE ---
+    state.alerts = [];
+    
+    state.tenants.forEach(t => {
+        if (t.status === "Active" || t.status === "Notice Period") {
+            const roomObj = state.rooms.find(r => r.id === t.roomId);
+            const roomLabel = roomObj ? `Room ${roomObj.number}` : "N/A";
+
+            // 1. Lease Agreement Expiration Alerts
+            if (t.endDate) {
+                const end = new Date(t.endDate);
+                const diffTime = end - today;
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays <= 30 && diffDays >= 0) {
+                    state.alerts.push({
+                        type: "warning",
+                        title: "Lease Expiring Soon",
+                        description: `Tenant ${t.name} (${roomLabel}) lease expires in ${diffDays} days.`
+                    });
+                } else if (diffDays < 0) {
+                    state.alerts.push({
+                        type: "danger",
+                        title: "Lease Overdue",
+                        description: `Tenant ${t.name} (${roomLabel}) lease expired on ${end.toLocaleDateString()}.`
+                    });
+                }
+            }
+
+            // 2. Unpaid Current Month Rent Alerts
+            const paidThisMonth = state.rent.some(r => r.tenantId === t.id && r.month === currentMonthName && Number(r.year) === currentYear);
+            if (!paidThisMonth) {
+                state.alerts.push({
+                    type: "danger",
+                    title: "Rent Overdue",
+                    description: `Tenant ${t.name} (${roomLabel}) has not paid rent for ${currentMonthName} ${currentYear}.`
+                });
+            }
+
+            // 3. Document Compliance Alerts
+            const docObj = t.docs || {};
+            const missingDocsList = [];
+            if (!docObj.aadhar) missingDocsList.push("Aadhar");
+            if (!docObj.pan) missingDocsList.push("PAN");
+            if (!docObj.agreement) missingDocsList.push("Lease Agreement");
+            if (!docObj.police) missingDocsList.push("Police Verification");
+            
+            if (missingDocsList.length > 0) {
+                state.alerts.push({
+                    type: "warning",
+                    title: "Compliance Gap",
+                    description: `${t.name} (${roomLabel}) is missing: ${missingDocsList.join(", ")}.`
+                });
+            }
+        }
+    });
+
+    // 4. Room Maintenance Active Status Alerts
+    state.rooms.forEach(r => {
+        if (r.status === "Maintenance") {
+            state.alerts.push({
+                type: "secondary",
+                title: "Maintenance",
+                description: `Room ${r.number} is actively offline for structural maintenance.`
+            });
+        }
+    });
+
+    // 5. Unpaid Utility Bills Alerts
+    state.electricity.forEach(e => {
+        if (e.status === "Pending") {
+            const targetRoom = state.rooms.find(r => r.id === e.roomId);
+            state.alerts.push({
+                type: "warning",
+                title: "Pending Utility Bill",
+                description: `Room ${targetRoom ? targetRoom.number : "N/A"} has a pending bill of ${formatCurrency(e.totalAmount)} for ${e.month}.`
+            });
+        }
+    });
+
+    dom.headerAlertCount.innerText = state.alerts.length;
+    if (state.alerts.length === 0) {
+        dom.headerAlertList.innerHTML = `<li class="p-2 border-bottom text-center"><small class="fw-bold">Notifications</small></li><li class="p-3 text-center text-muted"><small>No critical alerts active</small></li>`;
+    } else {
+        dom.headerAlertList.innerHTML = `<li class="p-2 border-bottom text-center"><small class="fw-bold">Notifications</small></li>` + state.alerts.map(a => `
+            <li class="p-2 border-bottom">
+                <div class="d-flex align-items-center gap-2">
+                    <span class="badge bg-${a.type}">${a.title}</span>
+                    <small class="text-dark d-block text-truncate" style="max-width: 180px;">${a.description}</small>
+                </div>
+            </li>
+        `).join("");
+    }
+    renderAlertsView();
+};
+
+const renderAlertsView = () => {
+    if (!dom.alertsMatrixContainer) return;
+    if (state.alerts.length === 0) {
+        dom.alertsMatrixContainer.innerHTML = `<div class="col-12 text-center text-muted py-5"><i class="bi bi-shield-check fs-1 text-success"></i><p class="mt-2">Zero system exceptions detected. All clear.</p></div>`;
+        return;
+    }
+    dom.alertsMatrixContainer.innerHTML = state.alerts.map(alert => `
+        <div class="col-12 col-md-6 col-lg-4">
+            <div class="card border-0 border-start border-${alert.type} border-4 shadow-sm p-3 bg-white">
+                <h6 class="fw-bold text-${alert.type} mb-1">${alert.title}</h6>
+                <p class="text-muted small m-0">${alert.description}</p>
+            </div>
+        </div>
+    `).join("");
+};
+
+const initCharts = () => {
+    if (state.activeView !== "dashboard") return;
+    const ctxRent = document.getElementById("chartRentCollection");
+    const ctxOccupancy = document.getElementById("chartOccupancyDistribution");
+    if (!ctxRent || !ctxOccupancy) return;
+    if (state.charts.rent) {
+        state.charts.rent.destroy();
+    }
+    if (state.charts.occ) {
+        state.charts.occ.destroy();
+    }
+    const isDark = document.documentElement.getAttribute("data-bs-theme") === "dark";
+    const gridColor = isDark ? "#334155" : "#e2e8f0";
+    const textColor = isDark ? "#cbd5e1" : "#1e293b";
+    const collections = {};
+    const monthsOrder = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    state.rent.forEach(r => {
+        const key = `${r.month} ${r.year}`;
+        collections[key] = (collections[key] || 0) + Number(r.amountPaid || 0);
+    });
+    const rawKeys = Object.keys(collections);
+    rawKeys.sort((a, b) => {
+        const [m1, y1] = a.split(" ");
+        const [m2, y2] = b.split(" ");
+        if (y1 !== y2) {
+            return Number(y1) - Number(y2);
+        }
+        return monthsOrder.indexOf(m1) - monthsOrder.indexOf(m2);
+    });
+    const rentLabels = rawKeys.slice(-6);
+    const rentData = rentLabels.map(k => collections[k]);
+    state.charts.rent = new Chart(ctxRent, {
+        type: "line",
+        data: {
+            labels: rentLabels.length > 0 ? rentLabels : ["No Ledger Data"],
+            datasets: [{
+                label: "Monthly Collection (₹)",
+                data: rentData.length > 0 ? rentData : [0],
+                borderColor: "#3b82f6",
+                backgroundColor: "rgba(59, 130, 246, 0.1)",
+                borderWidth: 3,
+                tension: 0.3,
+                fill: true
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { labels: { color: textColor } }
+            },
+            scales: {
+                x: { grid: { color: gridColor }, ticks: { color: textColor } },
+                y: { grid: { color: gridColor }, ticks: { color: textColor } }
+            }
+        }
+    });
+    const occupied = state.rooms.filter(r => r.status === "Occupied").length;
+    const vacant = state.rooms.filter(r => r.status === "Vacant").length;
+    const maintenance = state.rooms.filter(r => r.status === "Maintenance").length;
+    const reserved = state.rooms.filter(r => r.status === "Reserved").length;
+    state.charts.occ = new Chart(ctxOccupancy, {
+        type: "doughnut",
+        data: {
+            labels: ["Occupied", "Vacant", "Maintenance", "Reserved"],
+            datasets: [{
+                data: [occupied, vacant, maintenance, reserved],
+                backgroundColor: ["#10b981", "#3b82f6", "#f59e0b", "#64748b"],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: "bottom",
+                    labels: { color: textColor }
+                }
+            }
+        }
+    });
+};
+
 const renderRooms = (filterQuery = "", statusFilter = "") => {
     if (!dom.tableRoomsBody) return;
     let filtered = [...state.rooms];
@@ -471,9 +720,6 @@ dom.filterRoomsStatus.addEventListener("change", (e) => {
     renderRooms(dom.searchRoomsInput.value, e.target.value);
 });
 
-// =========================================================================
-// 5. REGISTRY ARCHITECTURE & DYNAMIC CONTEXTUAL VIEWER (TENANTS)
-// =========================================================================
 const renderTenants = (filterQuery = "", statusFilter = "") => {
     if (!dom.tableTenantsBody) return;
     let filtered = [...state.tenants];
@@ -985,7 +1231,7 @@ dom.formTenant.addEventListener("submit", async (e) => {
 
         if (id) {
             tenantRef = doc(db, "tenants", id);
-            batchObj.update(tenantRef, { ...cleanedData, roomId });
+            batchObj.update(tenantRef, cleanedData);
             const originalTenant = state.tenants.find(x => x.id === id);
             if (originalTenant && originalTenant.roomId !== roomId) {
                 if (originalTenant.roomId) {
@@ -1016,9 +1262,14 @@ dom.formTenant.addEventListener("submit", async (e) => {
     showLoader(false);
 });
 
-// =========================================================================
-// 6. BUSINESS SETTLE & LEASE TERMINATION ENGINE (OFFBOARDING)
-// =========================================================================
+dom.searchTenantsInput.addEventListener("input", (e) => {
+    renderTenants(e.target.value, dom.filterTenantsStatus.value);
+});
+
+dom.filterTenantsStatus.addEventListener("change", (e) => {
+    renderTenants(dom.searchTenantsInput.value, e.target.value);
+});
+
 window.checkoutTenant = (id) => {
     const t = state.tenants.find(x => x.id === id);
     if (!t) return;
@@ -1199,9 +1450,6 @@ dom.formCheckout.addEventListener("submit", async (e) => {
     showLoader(false);
 });
 
-// =========================================================================
-// 7. FINANCIAL LEDGERS & COLLECTIONS
-// =========================================================================
 const renderRent = () => {
     if (!dom.tableRentBody) return;
     const filterVal = dom.filterRentMonth.value;
@@ -1336,9 +1584,6 @@ dom.filterRentMonth.addEventListener("change", () => {
     renderRent();
 });
 
-// =========================================================================
-// 8. UTILITIES METERS & LEDGER (ELECTRICITY)
-// =========================================================================
 const calculateElectricityValues = () => {
     const prev = Number(dom.elecPrevReading.value || 0);
     const curr = Number(dom.elecCurrReading.value || 0);
@@ -1506,9 +1751,6 @@ const renderDocumentsView = () => {
     }).join("");
 };
 
-// =========================================================================
-// 9. ARCHIVED LOGS & STATISTICS (HISTORY)
-// =========================================================================
 const renderHistory = (qStr = "") => {
     if (!dom.tableHistoryBody) return;
     let records = [...state.history];
@@ -1520,7 +1762,6 @@ const renderHistory = (qStr = "") => {
     const totalOtherDues = records.reduce((sum, r) => sum + Number(r.otherDues || 0), 0);
     const totalSettlements = totalDamages + totalCleaning + totalOtherDues;
 
-    // Dynamically build and prepend stats container if missing
     let statsDiv = document.getElementById("history-stats-strip");
     if (!statsDiv) {
         statsDiv = document.createElement("div");
@@ -1630,9 +1871,185 @@ window.viewHistoryDetails = (id) => {
     instances.modalTenantDetail.show();
 };
 
-// =========================================================================
-// 10. SYSTEM DISASTER RECOVERY & BACKUPS
-// =========================================================================
+window.restoreHistoryRecord = (id) => {
+    const hist = state.history.find(h => h.id === id);
+    if (!hist) return;
+    showConfirmation("Restore Historical Tenant", `Are you sure you want to restore ${hist.tenantName} back to active tenant list?`, async () => {
+        showLoader(true);
+        try {
+            const batchObj = writeBatch(db);
+            const tenantRef = doc(db, "tenants", hist.tenantId);
+            batchObj.update(tenantRef, { status: "Active", roomId: hist.roomId });
+            if (hist.roomId) {
+                const roomRef = doc(db, "rooms", hist.roomId);
+                batchObj.update(roomRef, { status: "Occupied" });
+            }
+            const histRef = doc(db, "history", id);
+            batchObj.delete(histRef);
+            await batchObj.commit();
+            showToast(`Tenant ${hist.tenantName} successfully restored.`);
+            logActivity("RESTORE", `Restored tenant ${hist.tenantName}.`);
+        } catch (err) {
+            showToast(err.message, "danger");
+        }
+        showLoader(false);
+    });
+};
+
+dom.searchHistoryInput.addEventListener("input", (e) => {
+    renderHistory(e.target.value);
+});
+
+window.exportData = (collectionName, type) => {
+    let data = state[collectionName];
+    if (data.length === 0) {
+        showToast("No data to export", "warning");
+        return;
+    }
+    if (type === "excel") {
+        const ws = XLSX.utils.json_to_sheet(data.map(d => {
+            let row = { ...d };
+            delete row.id;
+            delete row.photoUrl;
+            if (row.docs) {
+                row.docs = JSON.stringify(row.docs);
+            }
+            return row;
+        }));
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, collectionName);
+        XLSX.writeFile(wb, `${collectionName}_master_audit_${new Date().toISOString().split("T")[0]}.xlsx`);
+        showToast("Excel spreadsheet ready.");
+    } else if (type === "pdf") {
+        const element = document.createElement("div");
+        element.className = "bg-white p-4";
+        element.innerHTML = `
+            <h2 class="fw-bold mb-2">${collectionName.toUpperCase()} REPORT</h2>
+            <p class="text-muted small">Generated on ${new Date().toLocaleDateString()}</p>
+            <hr>
+            <table class="table table-bordered align-middle">
+                <thead>
+                    <tr>${Object.keys(data[0]).filter(k => k !== "id" && k !== "photoUrl" && k !== "docs").map(k => `<th>${k.toUpperCase()}</th>`).join("")}</tr>
+                </thead>
+                <tbody>
+                    ${data.map(row => `<tr>${Object.keys(row).filter(k => k !== "id" && k !== "photoUrl" && k !== "docs").map(k => `<td>${row[k]}</td>`).join("")}</tr>`).join("")}
+                </tbody>
+            </table>
+        `;
+        html2pdf().from(element).set({
+            margin: 0.5,
+            filename: `${collectionName}_pdf_export.pdf`,
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: "in", format: "letter", orientation: "landscape" }
+        }).save();
+        showToast("PDF generation initiated.");
+    }
+};
+
+window.exportBackupJSON = () => {
+    const backupObj = {
+        rooms: state.rooms,
+        tenants: state.tenants,
+        rent: state.rent,
+        electricity: state.electricity,
+        history: state.history,
+        meta: {
+            exporter: "PropManager Pro Engine",
+            exportTime: new Date().toISOString(),
+            schema: "1.0.0"
+        }
+    };
+    const blob = new Blob([JSON.stringify(backupObj, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `PM_SystemBackup_${Date.now()}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    showToast("JSON cloud system backup generated successfully.");
+};
+
+dom.btnTriggerRestore.addEventListener("click", async () => {
+    const file = dom.importBackupFile.files[0];
+    if (!file) {
+        showToast("Select a valid backup JSON file first.", "warning");
+        return;
+    }
+    const confirmRestore = confirm("A database restoration will completely erase existing property clusters. Proceed with disaster recovery?");
+    if (!confirmRestore) return;
+    showLoader(true);
+    try {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const recoveryObj = JSON.parse(e.target.result);
+                if (!recoveryObj.rooms || !recoveryObj.tenants) {
+                    showToast("Malformed backup file architecture. Restore aborted.", "danger");
+                    showLoader(false);
+                    return;
+                }
+                const collectionsToClean = ["rooms", "tenants", "rent", "electricity", "history"];
+                for (const colName of collectionsToClean) {
+                    const snap = await getDocs(collection(db, colName));
+                    const cleanBatch = writeBatch(db);
+                    snap.forEach(docObj => {
+                        cleanBatch.delete(docObj.ref);
+                    });
+                    await cleanBatch.commit();
+                }
+                for (const colName of collectionsToClean) {
+                    const rawList = recoveryObj[colName] || [];
+                    if (rawList.length === 0) continue;
+                    let batchObj = writeBatch(db);
+                    let counter = 0;
+                    for (const item of rawList) {
+                        const originalId = item.id;
+                        const dataCopy = { ...item };
+                        delete dataCopy.id;
+                        const docRef = doc(db, colName, originalId);
+                        batchObj.set(docRef, dataCopy);
+                        counter++;
+                        if (counter === 400) {
+                            await batchObj.commit();
+                            batchObj = writeBatch(db);
+                            counter = 0;
+                        }
+                    }
+                    if (counter > 0) {
+                        await batchObj.commit();
+                    }
+                }
+                showToast("Data restoration finalized. Inventory reset complete.");
+                logActivity("RECOVER", "Complete cloud database restore triggered.");
+                setTimeout(() => location.reload(), 1500);
+            } catch (err) {
+                showToast(err.message, "danger");
+                showLoader(false);
+            }
+        };
+        reader.readAsText(file);
+    } catch (err) {
+        showToast(err.message, "danger");
+        showLoader(false);
+    }
+});
+
+let confirmationCallbackFn = null;
+const showConfirmation = (title, msg, callback) => {
+    document.getElementById("confirmationModalLabel").innerText = title;
+    document.getElementById("confirmationModalMessage").innerText = msg;
+    confirmationCallbackFn = callback;
+    instances.confirmationModal.show();
+};
+
+dom.btnConfirmAction.addEventListener("click", () => {
+    if (confirmationCallbackFn) {
+        confirmationCallbackFn();
+        confirmationCallbackFn = null;
+    }
+    instances.confirmationModal.hide();
+});
+
 const initializeDatabaseSubscriptions = () => {
     showLoader(true);
     let loadedWeight = 0;
@@ -1778,7 +2195,7 @@ function renderCumulativeDues() {
     
     const today = new Date();
     const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth();
+    const currentMonth = today.getMonth(); // 0-11
 
     let overdueCount = 0;
 

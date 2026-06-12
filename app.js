@@ -1,8 +1,9 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-app.js";
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
-import { getStorage, ref, uploadString, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, writeBatch, getDocs } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-firestore.js";
+import { getStorage } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
+// Database Credential Cluster
 const firebaseConfig = {
     apiKey: "AIzaSyB-dS8rEXwAwfdpXQhwhLNhsQYq6ug3XWA",
     authDomain: "tenant-75f84.firebaseapp.com",
@@ -17,6 +18,7 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 const auth = getAuth(app);
 
+// Application State Machine
 const state = {
     rooms: [],
     tenants: [],
@@ -32,6 +34,7 @@ const state = {
     unsubscribes: []
 };
 
+// Centralized DOM Selector Cache
 const dom = {
     sidebar: document.getElementById("sidebar"),
     sidebarToggle: document.getElementById("sidebar-toggle"),
@@ -166,11 +169,11 @@ const dom = {
     tableDuesLedgerBody: document.getElementById("table-dues-ledger-body"),
     cumulativeDuesBadge: document.getElementById("cumulative-dues-badge"),
     tableCumulativeDuesBody: document.getElementById("table-cumulative-dues-body"),
-    
-    // Detailed Profile Elements
     modalTenantDetail: document.getElementById("modalTenantDetail"),
     tenantDetailModalBody: document.getElementById("tenant-detail-modal-body"),
-    btnDetailEditTenant: document.getElementById("btn-detail-edit-tenant")
+    btnDetailEditTenant: document.getElementById("btn-detail-edit-tenant"),
+    checkoutProRataSummary: document.getElementById("checkout-pro-rata-summary"),
+    historyStatsStrip: document.getElementById("history-stats-strip")
 };
 
 const instances = {
@@ -182,6 +185,15 @@ const instances = {
     modalCheckout: new bootstrap.Modal(dom.modalCheckout),
     confirmationModal: new bootstrap.Modal(dom.confirmationModal),
     modalTenantDetail: new bootstrap.Modal(dom.modalTenantDetail)
+};
+
+// Generic Debouncer to limit computational thrashes on searches
+const debounce = (func, delay = 250) => {
+    let timeoutId;
+    return (...args) => {
+        clearTimeout(timeoutId);
+        timeoutId = setTimeout(() => func(...args), delay);
+    };
 };
 
 const showLoader = (show) => {
@@ -392,7 +404,7 @@ const calculateDashboardStats = () => {
     dom.dashMonthlyIncome.innerText = formatCurrency(rentCollected);
     dom.dashMissingDocs.innerText = missingDocsCount;
 
-    // --- ALERTS COMPILATION ENGINE ---
+    // ALERTS COMPILATION ENGINE
     state.alerts = [];
     
     state.tenants.forEach(t => {
@@ -400,7 +412,7 @@ const calculateDashboardStats = () => {
             const roomObj = state.rooms.find(r => r.id === t.roomId);
             const roomLabel = roomObj ? `Room ${roomObj.number}` : "N/A";
 
-            // 1. Lease Agreement Expiration Alerts
+            // Lease Agreement Expiration Alerts
             if (t.endDate) {
                 const end = new Date(t.endDate);
                 const diffTime = end - today;
@@ -420,7 +432,7 @@ const calculateDashboardStats = () => {
                 }
             }
 
-            // 2. Unpaid Current Month Rent Alerts
+            // Unpaid Current Month Rent Alerts
             const paidThisMonth = state.rent.some(r => r.tenantId === t.id && r.month === currentMonthName && Number(r.year) === currentYear);
             if (!paidThisMonth) {
                 state.alerts.push({
@@ -430,7 +442,7 @@ const calculateDashboardStats = () => {
                 });
             }
 
-            // 3. Document Compliance Alerts
+            // Document Compliance Alerts
             const docObj = t.docs || {};
             const missingDocsList = [];
             if (!docObj.aadhar) missingDocsList.push("Aadhar");
@@ -448,7 +460,7 @@ const calculateDashboardStats = () => {
         }
     });
 
-    // 4. Room Maintenance Active Status Alerts
+    // Room Maintenance Active Status Alerts
     state.rooms.forEach(r => {
         if (r.status === "Maintenance") {
             state.alerts.push({
@@ -459,7 +471,7 @@ const calculateDashboardStats = () => {
         }
     });
 
-    // 5. Unpaid Utility Bills Alerts
+    // Unpaid Utility Bills Alerts
     state.electricity.forEach(e => {
         if (e.status === "Pending") {
             const targetRoom = state.rooms.find(r => r.id === e.roomId);
@@ -496,7 +508,7 @@ const renderAlertsView = () => {
     dom.alertsMatrixContainer.innerHTML = state.alerts.map(alert => `
         <div class="col-12 col-md-6 col-lg-4">
             <div class="card border-0 border-start border-${alert.type} border-4 shadow-sm p-3 bg-white">
-                <h6 class="fw-bold text-${alert.type} mb-1">${alert.title}</h6>
+                <h4 class="h6 fw-bold text-${alert.type} mb-1">${alert.title}</h4>
                 <p class="text-muted small m-0">${alert.description}</p>
             </div>
         </div>
@@ -617,8 +629,8 @@ const renderRooms = (filterQuery = "", statusFilter = "") => {
                 <td>${r.occupancy}</td>
                 <td><span class="badge ${badgeClass}">${r.status}</span></td>
                 <td class="text-end pe-3">
-                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="editRoom('${r.id}')"><i class="bi bi-pencil-fill"></i></button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRoom('${r.id}')"><i class="bi bi-trash-fill"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="editRoom('${r.id}')" aria-label="Edit details for Room ${r.number}"><i class="bi bi-pencil-fill"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRoom('${r.id}')" aria-label="Delete Room ${r.number}"><i class="bi bi-trash-fill"></i></button>
                 </td>
             </tr>
         `;
@@ -712,9 +724,9 @@ dom.formRoom.addEventListener("submit", async (e) => {
     showLoader(false);
 });
 
-dom.searchRoomsInput.addEventListener("input", (e) => {
+dom.searchRoomsInput.addEventListener("input", debounce((e) => {
     renderRooms(e.target.value, dom.filterRoomsStatus.value);
-});
+}));
 
 dom.filterRoomsStatus.addEventListener("change", (e) => {
     renderRooms(dom.searchRoomsInput.value, e.target.value);
@@ -840,13 +852,13 @@ window.viewTenantDetails = (id) => {
     let modalHTML = `
         <div class="row g-4">
             <div class="col-12 col-lg-4 text-center border-end">
-                <img src="${t.photoUrl || 'https://placehold.co/150'}" class="img-fluid rounded-circle border p-1 mb-3" style="width:150px; height:150px; object-fit:cover;">
+                <img src="${t.photoUrl || 'https://placehold.co/150'}" class="img-fluid rounded-circle border p-1 mb-3" style="width:150px; height:150px; object-fit:cover;" alt="${t.name}">
                 <h4 class="fw-bold text-dark mb-1">${t.name}</h4>
                 <p class="text-muted small mb-2"><i class="bi bi-hash"></i> Room Reference: ${room ? `Room ${room.number}` : 'Unassigned'}</p>
                 <span class="badge ${t.status === 'Active' ? 'bg-success' : 'bg-secondary'} px-3 py-1.5 fs-7 mb-3">${t.status}</span>
                 
                 <div class="bg-light p-3 rounded border text-start mt-2">
-                    <h6 class="fw-bold text-dark border-bottom pb-2 mb-2">Finance Status Summary</h6>
+                    <h5 class="h6 fw-bold text-dark border-bottom pb-2 mb-2">Finance Status Summary</h5>
                     <div class="d-flex justify-content-between mb-2">
                         <span class="small text-muted">Current Month Dues (${currentMonthName}):</span>
                         <span class="small fw-bold ${currentMonthRentDue > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(currentMonthRentDue)}</span>
@@ -895,7 +907,7 @@ window.viewTenantDetails = (id) => {
 
                 <div class="tab-content" id="tenantDetailTabsContent">
                     <div class="tab-pane fade show active" id="tab-personal">
-                        <h6 class="fw-bold mb-3 text-primary">Personal & Identification Credentials</h6>
+                        <h5 class="h6 fw-bold mb-3 text-primary">Personal & Identification Credentials</h5>
                         <div class="row g-3 mb-4">
                             <div class="col-md-6"><span class="text-muted d-block small">Father's Name</span><strong>${t.fatherName || 'N/A'}</strong></div>
                             <div class="col-md-6"><span class="text-muted d-block small">Mother's Name</span><strong>${t.motherName || 'N/A'}</strong></div>
@@ -906,7 +918,7 @@ window.viewTenantDetails = (id) => {
                             <div class="col-md-6"><span class="text-muted d-block small">Passport / DL</span><strong>${t.passport || 'N/A'} / ${t.dl || 'N/A'}</strong></div>
                         </div>
 
-                        <h6 class="fw-bold mb-3 text-primary">Lease & Contact References</h6>
+                        <h5 class="h6 fw-bold mb-3 text-primary">Lease & Contact References</h5>
                         <div class="row g-3 mb-3">
                             <div class="col-md-6"><span class="text-muted d-block small">Mobile / Whatsapp</span><strong>${t.phone || 'N/A'} ${t.whatsapp ? `/ ${t.whatsapp}` : ''}</strong></div>
                             <div class="col-md-6"><span class="text-muted d-block small">Email Address</span><strong>${t.email || 'N/A'}</strong></div>
@@ -918,7 +930,7 @@ window.viewTenantDetails = (id) => {
                     </div>
 
                     <div class="tab-pane fade" id="tab-documents">
-                        <h6 class="fw-bold mb-3 text-primary">Verification Checklist Summary</h6>
+                        <h5 class="h6 fw-bold mb-3 text-primary">Verification Checklist Summary</h5>
                         <div class="list-group border-0">
                             <div class="list-group-item d-flex justify-content-between align-items-center bg-transparent px-0 border-0 border-bottom py-2">
                                 <span><i class="bi bi-card-text text-muted me-2"></i> Aadhar Verification Status</span>
@@ -940,16 +952,16 @@ window.viewTenantDetails = (id) => {
                     </div>
 
                     <div class="tab-pane fade" id="tab-payments">
-                        <h6 class="fw-bold mb-3 text-primary">Logged Rent Payment History</h6>
+                        <h5 class="h6 fw-bold mb-3 text-primary">Logged Rent Payment History</h5>
                         <div class="table-responsive" style="max-height: 250px;">
                             <table class="table table-sm table-hover align-middle">
                                 <thead class="table-light">
                                     <tr style="font-size:11px;">
-                                        <th>Date</th>
-                                        <th>Month / Year</th>
-                                        <th>Amount Received</th>
-                                        <th>Mode</th>
-                                        <th>Reference ID</th>
+                                        <th scope="col">Date</th>
+                                        <th scope="col">Month / Year</th>
+                                        <th scope="col">Amount Received</th>
+                                        <th scope="col">Mode</th>
+                                        <th scope="col">Reference ID</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -968,16 +980,16 @@ window.viewTenantDetails = (id) => {
                     </div>
 
                     <div class="tab-pane fade" id="tab-utilities">
-                        <h6 class="fw-bold mb-3 text-primary">Electricity Utility History</h6>
+                        <h5 class="h6 fw-bold mb-3 text-primary">Electricity Utility History</h5>
                         <div class="table-responsive" style="max-height: 250px;">
                             <table class="table table-sm table-hover align-middle">
                                 <thead class="table-light">
                                     <tr style="font-size:11px;">
-                                        <th>Billing Month</th>
-                                        <th>Readings (Prev / Curr)</th>
-                                        <th>Consumed</th>
-                                        <th>Amount Due</th>
-                                        <th>Status / Action</th>
+                                        <th scope="col">Billing Month</th>
+                                        <th scope="col">Readings (Prev / Curr)</th>
+                                        <th scope="col">Consumed</th>
+                                        <th scope="col">Amount Due</th>
+                                        <th scope="col">Status / Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -990,7 +1002,7 @@ window.viewTenantDetails = (id) => {
                                             <td>
                                                 ${e.status === 'Paid' 
                                                     ? `<span class="badge bg-success">Paid</span>` 
-                                                    : `<button class="btn btn-xs btn-success py-1 px-2 font-size-11" onclick="payElecBillDirect('${e.id}', '${t.id}')"><i class="bi bi-check-lg"></i> Pay Bill</button>`
+                                                    : `<button class="btn btn-xs btn-success py-1 px-2" style="font-size:11px;" onclick="payElecBillDirect('${e.id}', '${t.id}')"><i class="bi bi-check-lg"></i> Pay Bill</button>`
                                                 }
                                             </td>
                                         </tr>
@@ -1262,9 +1274,9 @@ dom.formTenant.addEventListener("submit", async (e) => {
     showLoader(false);
 });
 
-dom.searchTenantsInput.addEventListener("input", (e) => {
+dom.searchTenantsInput.addEventListener("input", debounce((e) => {
     renderTenants(e.target.value, dom.filterTenantsStatus.value);
-});
+}));
 
 dom.filterTenantsStatus.addEventListener("change", (e) => {
     renderTenants(dom.searchTenantsInput.value, e.target.value);
@@ -1306,7 +1318,7 @@ const calculateProratedValues = () => {
     const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
     const daysSpent = d.getDate();
     const monthlyRent = Number(tObj.rent || 0);
-    const dailyRent = monthlyRent / daysInMonth;
+    const dailyRent = daysInMonth > 0 ? (monthlyRent / daysInMonth) : 0;
     const proratedExpected = Math.round(dailyRent * daysSpent);
     
     const paidThisMonth = state.rent
@@ -1339,17 +1351,11 @@ const calculateProratedValues = () => {
         .filter(e => e.roomId === tObj.roomId && e.status === "Pending")
         .reduce((sum, e) => sum + Number(e.totalAmount || 0), 0);
         
-    let summaryDiv = document.getElementById("checkout-pro-rata-summary");
-    if (!summaryDiv) {
-        summaryDiv = document.createElement("div");
-        summaryDiv.id = "checkout-pro-rata-summary";
-        summaryDiv.className = "col-12 mt-3 p-3 bg-light rounded border border-secondary border-opacity-25";
-        const notesField = dom.chkoutNotes.parentElement;
-        notesField.parentNode.insertBefore(summaryDiv, notesField);
-    }
+    const summaryDiv = dom.checkoutProRataSummary;
+    if (!summaryDiv) return;
     
     summaryDiv.innerHTML = `
-        <h6 class="fw-bold text-dark border-bottom pb-2 mb-2"><i class="bi bi-calculator"></i> Settlement Calculation Breakdown</h6>
+        <h5 class="h6 fw-bold text-dark border-bottom pb-2 mb-2"><i class="bi bi-calculator"></i> Settlement Calculation Breakdown</h5>
         <div class="row g-2 small text-dark">
             <div class="col-md-6">
                 <span class="text-muted d-block">Days in checkout month (${monthName}):</span>
@@ -1385,7 +1391,7 @@ const calculateProratedValues = () => {
             </div>
         </div>
         <div class="mt-2 text-end">
-            <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2 font-size-11" onclick="applyCheckoutAutoDues(${proratedRentDue + previousRentOutstanding + electricityDues})">
+            <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2" style="font-size:11px;" onclick="applyCheckoutAutoDues(${proratedRentDue + previousRentOutstanding + electricityDues})">
                 <i class="bi bi-box-arrow-in-down-left"></i> Apply to 'Other Unpaid Dues' field
             </button>
         </div>
@@ -1476,8 +1482,8 @@ const renderRent = () => {
                 <td><code>${r.transactionNo || "N/A"}</code></td>
                 <td><span class="badge bg-success">${r.status || "Paid"}</span></td>
                 <td class="text-end pe-3">
-                    <button class="btn btn-sm btn-outline-primary me-1" onclick="printReceipt('${r.id}')"><i class="bi bi-printer-fill"></i></button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRentRecord('${r.id}')"><i class="bi bi-trash-fill"></i></button>
+                    <button class="btn btn-sm btn-outline-primary me-1" onclick="printReceipt('${r.id}')" aria-label="Print receipt for transaction ${r.id}"><i class="bi bi-printer-fill"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRentRecord('${r.id}')" aria-label="Delete rent record ${r.id}"><i class="bi bi-trash-fill"></i></button>
                 </td>
             </tr>
         `;
@@ -1544,7 +1550,7 @@ dom.formRent.addEventListener("submit", async (e) => {
     const tId = dom.rentTenantId.value;
     const amt = Number(dom.rentAmountPaid.value || 0);
     const month = dom.rentMonth.value;
-    const year = Number(dom.rentYear.value || 2024);
+    const year = Number(dom.rentYear.value || 2026);
     const mode = dom.rentMode.value;
     const tx = dom.rentTransNo.value.trim();
     const notes = dom.rentRemarks.value.trim();
@@ -1682,8 +1688,8 @@ const renderElectricity = () => {
                 <td class="fw-bold text-danger">${formatCurrency(e.totalAmount)}</td>
                 <td><span class="badge bg-warning text-dark">${e.status}</span></td>
                 <td class="text-end pe-3">
-                    <button class="btn btn-sm btn-outline-success me-1" onclick="payElecBill('${e.id}')"><i class="bi bi-check-circle-fill"></i> Mark Paid</button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteElecBill('${e.id}')"><i class="bi bi-trash-fill"></i></button>
+                    <button class="btn btn-sm btn-outline-success me-1" onclick="payElecBill('${e.id}')" aria-label="Mark utility bill ${e.id} as paid"><i class="bi bi-check-circle-fill"></i> Mark Paid</button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteElecBill('${e.id}')" aria-label="Delete utility reading ${e.id}"><i class="bi bi-trash-fill"></i></button>
                 </td>
             </tr>
         `;
@@ -1737,7 +1743,7 @@ const renderDocumentsView = () => {
             <tr>
                 <td>
                     <div class="d-flex align-items-center gap-3">
-                        <img src="${t.photoUrl || 'https://placehold.co/40'}" class="rounded-circle border" width="35" height="35" style="object-fit:cover;">
+                        <img src="${t.photoUrl || 'https://placehold.co/40'}" class="rounded-circle border" width="35" height="35" style="object-fit:cover;" alt="">
                         <span class="fw-bold">${t.name}</span>
                     </div>
                 </td>
@@ -1755,44 +1761,36 @@ const renderHistory = (qStr = "") => {
     if (!dom.tableHistoryBody) return;
     let records = [...state.history];
     
-    // --- DYNAMIC SUMMARY METRICS CALCULATOR ---
+    // DYNAMIC SUMMARY METRICS CALCULATOR
     const totalPastCount = records.length;
     const totalDamages = records.reduce((sum, r) => sum + Number(r.damageDeductions || 0), 0);
     const totalCleaning = records.reduce((sum, r) => sum + Number(r.cleaningDeductions || 0), 0);
     const totalOtherDues = records.reduce((sum, r) => sum + Number(r.otherDues || 0), 0);
     const totalSettlements = totalDamages + totalCleaning + totalOtherDues;
 
-    let statsDiv = document.getElementById("history-stats-strip");
-    if (!statsDiv) {
-        statsDiv = document.createElement("div");
-        statsDiv.id = "history-stats-strip";
-        statsDiv.className = "row g-3 mb-4";
-        const searchBarCard = dom.searchHistoryInput.closest(".card");
-        if (searchBarCard) {
-            searchBarCard.parentNode.insertBefore(statsDiv, searchBarCard.nextSibling);
-        }
+    const statsDiv = dom.historyStatsStrip;
+    if (statsDiv) {
+        statsDiv.innerHTML = `
+            <div class="col-12 col-md-4">
+                <div class="card border-0 shadow-sm p-3 bg-white text-center">
+                    <span class="text-muted small">Checked-Out Profiles</span>
+                    <h4 class="fw-bold text-dark m-0 mt-1" style="font-size:1.5rem;">${totalPastCount} Past Tenants</h4>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card border-0 shadow-sm p-3 bg-white text-center">
+                    <span class="text-muted small">Total Damage Charges</span>
+                    <h4 class="fw-bold text-danger m-0 mt-1" style="font-size:1.5rem;">${formatCurrency(totalDamages)}</h4>
+                </div>
+            </div>
+            <div class="col-12 col-md-4">
+                <div class="card border-0 shadow-sm p-3 bg-white text-center">
+                    <span class="text-muted small">Total Offboarding Recoveries</span>
+                    <h4 class="fw-bold text-success m-0 mt-1" style="font-size:1.5rem;">${formatCurrency(totalSettlements)}</h4>
+                </div>
+            </div>
+        `;
     }
-
-    statsDiv.innerHTML = `
-        <div class="col-12 col-md-4">
-            <div class="card border-0 shadow-sm p-3 bg-white text-center">
-                <span class="text-muted small">Checked-Out Profiles</span>
-                <h4 class="fw-bold text-dark m-0 mt-1">${totalPastCount} Past Tenants</h4>
-            </div>
-        </div>
-        <div class="col-12 col-md-4">
-            <div class="card border-0 shadow-sm p-3 bg-white text-center">
-                <span class="text-muted small">Total Damage Charges</span>
-                <h4 class="fw-bold text-danger m-0 mt-1">${formatCurrency(totalDamages)}</h4>
-            </div>
-        </div>
-        <div class="col-12 col-md-4">
-            <div class="card border-0 shadow-sm p-3 bg-white text-center">
-                <span class="text-muted small">Total Offboarding Recoveries</span>
-                <h4 class="fw-bold text-success m-0 mt-1">${formatCurrency(totalSettlements)}</h4>
-            </div>
-        </div>
-    `;
 
     if (qStr) {
         records = records.filter(r => r.tenantName.toLowerCase().includes(qStr.toLowerCase()) || r.roomNumber.toLowerCase().includes(qStr.toLowerCase()));
@@ -1840,7 +1838,7 @@ window.viewHistoryDetails = (id) => {
             <div class="col-md-6"><span class="text-muted small d-block">Checkout Date:</span><strong>${h.checkoutDate ? new Date(h.checkoutDate).toLocaleDateString() : 'N/A'}</strong></div>
             
             <div class="col-12 border-top pt-3">
-                <h6 class="fw-bold text-danger"><i class="bi bi-receipt"></i> Offboarding Settlement Deductions</h6>
+                <h5 class="h6 fw-bold text-danger"><i class="bi bi-receipt"></i> Offboarding Settlement Deductions</h5>
                 <div class="row g-2 bg-light p-3 rounded border">
                     <div class="col-md-4"><span class="text-muted d-block small">Damage Deductions:</span><strong>${formatCurrency(h.damageDeductions || 0)}</strong></div>
                     <div class="col-md-4"><span class="text-muted d-block small">Cleaning Deductions:</span><strong>${formatCurrency(h.cleaningDeductions || 0)}</strong></div>
@@ -1896,9 +1894,9 @@ window.restoreHistoryRecord = (id) => {
     });
 };
 
-dom.searchHistoryInput.addEventListener("input", (e) => {
+dom.searchHistoryInput.addEventListener("input", debounce((e) => {
     renderHistory(e.target.value);
-});
+}));
 
 window.exportData = (collectionName, type) => {
     let data = state[collectionName];
@@ -2171,7 +2169,7 @@ function renderDuesLedger() {
             <tr>
                 <td>
                     <div class="d-flex align-items-center gap-2">
-                        <img src="${t.photoUrl || 'https://placehold.co/40'}" class="rounded-circle border" width="30" height="30" style="object-fit:cover;">
+                        <img src="${t.photoUrl || 'https://placehold.co/40'}" class="rounded-circle border" width="30" height="30" style="object-fit:cover;" alt="">
                         <span class="fw-bold text-dark">${t.name}</span>
                     </div>
                 </td>
@@ -2195,7 +2193,7 @@ function renderCumulativeDues() {
     
     const today = new Date();
     const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth(); // 0-11
+    const currentMonth = today.getMonth();
 
     let overdueCount = 0;
 
@@ -2276,7 +2274,7 @@ function renderCumulativeDues() {
             <tr>
                 <td>
                     <div class="d-flex align-items-center gap-2">
-                        <img src="${t.photoUrl || 'https://placehold.co/40'}" class="rounded-circle border" width="30" height="30" style="object-fit:cover;">
+                        <img src="${t.photoUrl || 'https://placehold.co/40'}" class="rounded-circle border" width="30" height="30" style="object-fit:cover;" alt="">
                         <span class="fw-bold text-dark">${t.name}</span>
                     </div>
                 </td>
@@ -2367,12 +2365,13 @@ let isSignUpMode = false;
 
 dom.btnToggleSignup.addEventListener("click", () => {
     isSignUpMode = !isSignUpMode;
+    const infoText = document.querySelector("#login-screen p.text-secondary");
     if (isSignUpMode) {
-        document.querySelector("#login-screen h3 + p").innerText = "Create an administrator account";
+        if (infoText) infoText.innerText = "Create an administrator account";
         dom.btnLoginSubmit.innerText = "Register Administrator";
         dom.btnToggleSignup.innerText = "Have an account? Sign In";
     } else {
-        document.querySelector("#login-screen h3 + p").innerText = "Please sign in to access your portfolio";
+        if (infoText) infoText.innerText = "Please sign in to access your portfolio";
         dom.btnLoginSubmit.innerText = "Sign In";
         dom.btnToggleSignup.innerText = "Don't have an account? Sign Up";
     }
@@ -2381,15 +2380,15 @@ dom.btnToggleSignup.addEventListener("click", () => {
 dom.formLogin.addEventListener("submit", async (e) => {
     e.preventDefault();
     const email = dom.loginEmail.value.trim();
-    const password = dom.loginPassword;
+    const password = dom.loginPassword.value;
     
     showLoader(true);
     try {
         if (isSignUpMode) {
-            await createUserWithEmailAndPassword(auth, email, password.value);
+            await createUserWithEmailAndPassword(auth, email, password);
             showToast("Administrator registered successfully.");
         } else {
-            await signInWithEmailAndPassword(auth, email, password.value);
+            await signInWithEmailAndPassword(auth, email, password);
             showToast("Successfully authenticated.");
         }
     } catch (err) {

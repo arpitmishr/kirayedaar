@@ -815,6 +815,17 @@ window.viewTenantDetails = (id) => {
                         <span class="small fw-bold text-dark">${formatCurrency(t.rent || 0)} / mo</span>
                     </div>
                 </div>
+
+                <div class="d-grid gap-2 mt-3">
+                    <button class="btn btn-sm btn-success w-100 py-2 fw-semibold" onclick="payTenantRentDirect('${t.id}')">
+                        <i class="bi bi-cash-coin"></i> Record Rent Payment
+                    </button>
+                    ${room ? `
+                    <button class="btn btn-sm btn-warning text-dark w-100 py-2 fw-semibold" onclick="addTenantElectricityDirect('${room.id}')">
+                        <i class="bi bi-lightning-charge-fill"></i> Add Electricity Bill
+                    </button>
+                    ` : ''}
+                </div>
             </div>
 
             <div class="col-12 col-lg-8">
@@ -917,7 +928,7 @@ window.viewTenantDetails = (id) => {
                                         <th>Readings (Prev / Curr)</th>
                                         <th>Consumed</th>
                                         <th>Amount Due</th>
-                                        <th>Status</th>
+                                        <th>Status / Action</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -927,7 +938,12 @@ window.viewTenantDetails = (id) => {
                                             <td>${e.prevReading} / ${e.currReading}</td>
                                             <td>${e.unitsConsumed} Units</td>
                                             <td class="fw-bold text-danger">${formatCurrency(e.totalAmount)}</td>
-                                            <td><span class="badge ${e.status === 'Paid' ? 'bg-success' : 'bg-warning text-dark'}">${e.status}</span></td>
+                                            <td>
+                                                ${e.status === 'Paid' 
+                                                    ? `<span class="badge bg-success">Paid</span>` 
+                                                    : `<button class="btn btn-xs btn-success py-1 px-2 font-size-11" onclick="payElecBillDirect('${e.id}', '${t.id}')"><i class="bi bi-check-lg"></i> Pay Bill</button>`
+                                                }
+                                            </td>
                                         </tr>
                                     `).join("")}
                                 </tbody>
@@ -949,6 +965,56 @@ window.viewTenantDetails = (id) => {
     };
 
     instances.modalTenantDetail.show();
+};
+
+window.payTenantRentDirect = (tenantId) => {
+    instances.modalTenantDetail.hide();
+    setTimeout(() => {
+        dom.formRent.reset();
+        syncTenantDropdowns();
+        if (dom.rentTenantId) {
+            dom.rentTenantId.value = tenantId;
+        }
+        const today = new Date();
+        const currentMonthName = today.toLocaleString('default', { month: 'long' });
+        const currentYear = today.getFullYear();
+        if (dom.rentMonth) dom.rentMonth.value = currentMonthName;
+        if (dom.rentYear) dom.rentYear.value = currentYear;
+        
+        instances.modalRent.show();
+    }, 350);
+};
+
+window.addTenantElectricityDirect = (roomId) => {
+    instances.modalTenantDetail.hide();
+    setTimeout(() => {
+        dom.formElectricity.reset();
+        syncRoomDropdowns();
+        if (dom.elecRoomId) {
+            dom.elecRoomId.value = roomId;
+        }
+        const rObj = state.rooms.find(r => r.id === roomId);
+        if (rObj) {
+            dom.elecPrevReading.value = rObj.elecMeter || 0;
+            calculateElectricityValues();
+        }
+        instances.modalElectricity.show();
+    }, 350);
+};
+
+window.payElecBillDirect = async (elecId, tenantId) => {
+    showLoader(true);
+    try {
+        await updateDoc(doc(db, "electricity", elecId), { status: "Paid" });
+        showToast("Utility bill successfully paid.");
+        logActivity("REVENUE", "Electricity utility bill settled.");
+        setTimeout(() => {
+            window.viewTenantDetails(tenantId);
+        }, 500);
+    } catch (err) {
+        showToast(err.message, "danger");
+    }
+    showLoader(false);
 };
 
 window.openTenantModal = () => {
@@ -1163,7 +1229,123 @@ window.checkoutTenant = (id) => {
         document.getElementById("chkout_meter_reading").placeholder = `Previous meter: ${associatedRoom.elecMeter || 0}`;
     }
     instances.modalCheckout.show();
+    
+    setTimeout(() => {
+        calculateProratedValues();
+    }, 200);
 };
+
+const calculateProratedValues = () => {
+    const tenantId = dom.chkoutTenantId.value;
+    const leaveDateVal = dom.chkoutDate.value;
+    if (!tenantId || !leaveDateVal) return;
+    
+    const tObj = state.tenants.find(x => x.id === tenantId);
+    if (!tObj) return;
+    
+    const d = new Date(leaveDateVal);
+    if (isNaN(d.getTime())) return;
+    
+    const year = d.getFullYear();
+    const monthIndex = d.getMonth();
+    const monthsOrder = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+    const monthName = monthsOrder[monthIndex];
+    
+    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+    const daysSpent = d.getDate();
+    const monthlyRent = Number(tObj.rent || 0);
+    const dailyRent = monthlyRent / daysInMonth;
+    const proratedExpected = Math.round(dailyRent * daysSpent);
+    
+    const paidThisMonth = state.rent
+        .filter(r => r.tenantId === tObj.id && r.month === monthName && Number(r.year) === year)
+        .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
+        
+    const proratedRentDue = Math.max(0, proratedExpected - paidThisMonth);
+    
+    let previousExpected = 0;
+    let previousPaid = 0;
+    if (tObj.joinDate) {
+        const join = new Date(tObj.joinDate);
+        if (!isNaN(join.getTime())) {
+            let y = join.getFullYear();
+            let m = join.getMonth();
+            while (y < year || (y === year && m < monthIndex)) {
+                previousExpected += monthlyRent;
+                const paidMonthName = monthsOrder[m];
+                previousPaid += state.rent
+                    .filter(r => r.tenantId === tObj.id && r.month === paidMonthName && Number(r.year) === y)
+                    .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
+                m++;
+                if (m > 11) { m = 0; y++; }
+            }
+        }
+    }
+    const previousRentOutstanding = Math.max(0, previousExpected - previousPaid);
+    
+    const electricityDues = state.electricity
+        .filter(e => e.roomId === tObj.roomId && e.status === "Pending")
+        .reduce((sum, e) => sum + Number(e.totalAmount || 0), 0);
+        
+    let summaryDiv = document.getElementById("checkout-pro-rata-summary");
+    if (!summaryDiv) {
+        summaryDiv = document.createElement("div");
+        summaryDiv.id = "checkout-pro-rata-summary";
+        summaryDiv.className = "col-12 mt-3 p-3 bg-light rounded border border-secondary border-opacity-25";
+        const notesField = dom.chkoutNotes.parentElement;
+        notesField.parentNode.insertBefore(summaryDiv, notesField);
+    }
+    
+    summaryDiv.innerHTML = `
+        <h6 class="fw-bold text-dark border-bottom pb-2 mb-2"><i class="bi bi-calculator"></i> Settlement Calculation Breakdown</h6>
+        <div class="row g-2 small text-dark">
+            <div class="col-md-6">
+                <span class="text-muted d-block">Days in checkout month (${monthName}):</span>
+                <strong>${daysSpent} / ${daysInMonth} Days</strong>
+            </div>
+            <div class="col-md-6">
+                <span class="text-muted d-block">Daily Rent rate (computed):</span>
+                <strong>${formatCurrency(dailyRent)} / day</strong>
+            </div>
+            <div class="col-md-6 border-top pt-2">
+                <span class="text-muted d-block">Prorated Final Month Rent:</span>
+                <strong>${formatCurrency(proratedExpected)}</strong>
+            </div>
+            <div class="col-md-6 border-top pt-2">
+                <span class="text-muted d-block">Paid this final month:</span>
+                <strong class="text-success">${formatCurrency(paidThisMonth)}</strong>
+            </div>
+            <div class="col-md-6 border-top pt-2">
+                <span class="text-muted d-block">Final Month Rent Due:</span>
+                <strong class="${proratedRentDue > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(proratedRentDue)}</strong>
+            </div>
+            <div class="col-md-6 border-top pt-2">
+                <span class="text-muted d-block">Previous Months Unpaid Rent:</span>
+                <strong class="${previousRentOutstanding > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(previousRentOutstanding)}</strong>
+            </div>
+            <div class="col-md-6 border-top pt-2">
+                <span class="text-muted d-block">Unpaid Electricity Dues:</span>
+                <strong class="${electricityDues > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(electricityDues)}</strong>
+            </div>
+            <div class="col-md-6 border-top pt-2">
+                <span class="text-muted d-block">Total Auto-Calculated Dues:</span>
+                <h6 class="m-0 fw-bold text-danger">${formatCurrency(proratedRentDue + previousRentOutstanding + electricityDues)}</h6>
+            </div>
+        </div>
+        <div class="mt-2 text-end">
+            <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2 font-size-11" onclick="applyCheckoutAutoDues(${proratedRentDue + previousRentOutstanding + electricityDues})">
+                <i class="bi bi-box-arrow-in-down-left"></i> Apply to 'Other Unpaid Dues' field
+            </button>
+        </div>
+    `;
+};
+
+window.applyCheckoutAutoDues = (amount) => {
+    dom.chkoutDues.value = amount;
+    showToast(`Applied ₹${amount} to unpaid dues.`);
+};
+
+dom.chkoutDate.addEventListener("change", calculateProratedValues);
 
 dom.formCheckout.addEventListener("submit", async (e) => {
     e.preventDefault();

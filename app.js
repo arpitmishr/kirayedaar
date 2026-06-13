@@ -3,7 +3,6 @@ import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot
 import { getStorage } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-storage.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.1/firebase-auth.js";
 
-// Database Credential Cluster
 const firebaseConfig = {
     apiKey: "AIzaSyB-dS8rEXwAwfdpXQhwhLNhsQYq6ug3XWA",
     authDomain: "tenant-75f84.firebaseapp.com",
@@ -18,7 +17,6 @@ const db = getFirestore(app);
 const storage = getStorage(app);
 const auth = getAuth(app);
 
-// Application State Machine
 const state = {
     rooms: [],
     tenants: [],
@@ -34,10 +32,7 @@ const state = {
     unsubscribes: []
 };
 
-// Centralized DOM Selector Cache
 const dom = {
-    rentEditId: document.getElementById("rent-edit-id"),
-    elecEditId: document.getElementById("elec-edit-id"),
     sidebar: document.getElementById("sidebar"),
     sidebarToggle: document.getElementById("sidebar-toggle"),
     themeToggler: document.getElementById("theme-toggler"),
@@ -132,6 +127,7 @@ const dom = {
     chkDocPolice: document.getElementById("chk_doc_police"),
     modalRent: document.getElementById("modalRent"),
     formRent: document.getElementById("form-rent"),
+    rentEditId: document.getElementById("rent-edit-id"),
     rentTenantId: document.getElementById("rent_tenant_id"),
     rentMonth: document.getElementById("rent_month"),
     rentYear: document.getElementById("rent_year"),
@@ -142,6 +138,7 @@ const dom = {
     rentRemarks: document.getElementById("rent_remarks"),
     modalElectricity: document.getElementById("modalElectricity"),
     formElectricity: document.getElementById("form-electricity"),
+    elecEditId: document.getElementById("elec-edit-id"),
     elecRoomId: document.getElementById("elec_room_id"),
     elecMonth: document.getElementById("elec_month"),
     elecRate: document.getElementById("elec_rate"),
@@ -189,7 +186,6 @@ const instances = {
     modalTenantDetail: new bootstrap.Modal(dom.modalTenantDetail)
 };
 
-// Generic Debouncer to limit computational thrashes on searches
 const debounce = (func, delay = 250) => {
     let timeoutId;
     return (...args) => {
@@ -251,15 +247,12 @@ const formatCurrency = (val) => {
 const getDueDate = (joinDateStr, monthsToAdd) => {
     const join = new Date(joinDateStr);
     const day = join.getDate();
-    // Set to 1st of month first to prevent month-overflow rollovers
     join.setDate(1);
     join.setMonth(join.getMonth() + monthsToAdd);
-    // Determine target month's maximum days
     const maxDays = new Date(join.getFullYear(), join.getMonth() + 1, 0).getDate();
     join.setDate(Math.min(day, maxDays));
     return join;
 };
-
 
 const switchView = (targetView) => {
     const views = document.querySelectorAll(".app-view");
@@ -396,7 +389,7 @@ const calculateDashboardStats = () => {
     const today = new Date();
     const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     let pendingRentCount = 0;
-    
+
     state.tenants.forEach(t => {
         if (t.status === "Active" && t.joinDate) {
             let cyclesElapsed = 0;
@@ -432,7 +425,6 @@ const calculateDashboardStats = () => {
     dom.dashMonthlyIncome.innerText = formatCurrency(rentCollected);
     dom.dashMissingDocs.innerText = missingDocsCount;
 
-    // ALERTS COMPILATION ENGINE
     state.alerts = [];
     
     state.tenants.forEach(t => {
@@ -440,7 +432,6 @@ const calculateDashboardStats = () => {
             const roomObj = state.rooms.find(r => r.id === t.roomId);
             const roomLabel = roomObj ? `Room ${roomObj.number}` : "N/A";
 
-            // Lease Agreement Expiration Alerts
             if (t.endDate) {
                 const end = new Date(t.endDate);
                 const diffTime = end - today;
@@ -460,8 +451,6 @@ const calculateDashboardStats = () => {
                 }
             }
 
-            // Unpaid Current Month Rent Alerts
-            // Unpaid Overdue Cycle Alerts
             let cyclesElapsed = 0;
             if (t.joinDate) {
                 while (true) {
@@ -487,7 +476,6 @@ const calculateDashboardStats = () => {
                 });
             }
 
-            // Document Compliance Alerts
             const docObj = t.docs || {};
             const missingDocsList = [];
             if (!docObj.aadhar) missingDocsList.push("Aadhar");
@@ -505,7 +493,6 @@ const calculateDashboardStats = () => {
         }
     });
 
-    // Room Maintenance Active Status Alerts
     state.rooms.forEach(r => {
         if (r.status === "Maintenance") {
             state.alerts.push({
@@ -516,7 +503,6 @@ const calculateDashboardStats = () => {
         }
     });
 
-    // Unpaid Utility Bills Alerts
     state.electricity.forEach(e => {
         if (e.status === "Pending") {
             const targetRoom = state.rooms.find(r => r.id === e.roomId);
@@ -837,13 +823,6 @@ window.viewTenantDetails = (id) => {
     if (!t) return;
 
     const room = state.rooms.find(r => r.id === t.roomId);
-    
-    const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth();
-    const monthsOrder = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const currentMonthName = monthsOrder[currentMonth];
-
     const today = new Date();
     const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
@@ -868,8 +847,6 @@ window.viewTenantDetails = (id) => {
     const nextDue = t.joinDate ? getDueDate(t.joinDate, cyclesElapsed + 1) : null;
     const nextDueStr = nextDue ? nextDue.toLocaleDateString() : "N/A";
 
-    
-
     const paymentsLog = state.rent.filter(r => r.tenantId === t.id)
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
         
@@ -889,7 +866,7 @@ window.viewTenantDetails = (id) => {
                 <p class="text-muted small mb-2"><i class="bi bi-hash"></i> Room Reference: ${room ? `Room ${room.number}` : 'Unassigned'}</p>
                 <span class="badge ${t.status === 'Active' ? 'bg-success' : 'bg-secondary'} px-3 py-1.5 fs-7 mb-3">${t.status}</span>
                 
-               <div class="bg-light p-3 rounded border text-start mt-2">
+                <div class="bg-light p-3 rounded border text-start mt-2">
                     <h5 class="h6 fw-bold text-dark border-bottom pb-2 mb-2">Cycle-Based Finance Summary</h5>
                     <div class="d-flex justify-content-between mb-2">
                         <span class="small text-muted">Billed Cycles Elapsed:</span>
@@ -903,7 +880,6 @@ window.viewTenantDetails = (id) => {
                         <span class="small text-muted">Cumulative Rent Due:</span>
                         <span class="small fw-bold ${cumulativeRentDue > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(cumulativeRentDue)}</span>
                     </div>
-                    
                     <div class="d-flex justify-content-between mb-2">
                         <span class="small text-muted">Security Deposit:</span>
                         <span class="small fw-bold text-secondary">${formatCurrency(t.deposit || 0)}</span>
@@ -1072,6 +1048,7 @@ window.payTenantRentDirect = (tenantId) => {
     instances.modalTenantDetail.hide();
     setTimeout(() => {
         dom.formRent.reset();
+        dom.rentEditId.value = "";
         syncTenantDropdowns();
         if (dom.rentTenantId) {
             dom.rentTenantId.value = tenantId;
@@ -1090,6 +1067,7 @@ window.addTenantElectricityDirect = (roomId) => {
     instances.modalTenantDetail.hide();
     setTimeout(() => {
         dom.formElectricity.reset();
+        dom.elecEditId.value = "";
         syncRoomDropdowns();
         if (dom.elecRoomId) {
             dom.elecRoomId.value = roomId;
@@ -1350,7 +1328,6 @@ const calculateProratedValues = () => {
     const joinDate = new Date(tObj.joinDate);
     if (isNaN(joinDate.getTime())) return;
 
-    // Normalize dates to exclude timestamps
     const startOfExit = new Date(exitDate.getFullYear(), exitDate.getMonth(), exitDate.getDate());
     const startOfJoin = new Date(joinDate.getFullYear(), joinDate.getMonth(), joinDate.getDate());
 
@@ -1360,7 +1337,6 @@ const calculateProratedValues = () => {
         return;
     }
 
-    // Calculate full cycles elapsed prior to checkout date
     let cyclesElapsed = 0;
     while (true) {
         const cycleEndDate = getDueDate(tObj.joinDate, cyclesElapsed + 1);
@@ -1371,24 +1347,17 @@ const calculateProratedValues = () => {
         }
     }
 
-    // Compute expected rent for all fully completed cycles
     const fullCyclesExpected = cyclesElapsed * Number(tObj.rent || 0);
-
-    // Compute proration for the remaining partial cycle
     const currentCycleStartDate = getDueDate(tObj.joinDate, cyclesElapsed);
     const currentCycleEndDate = getDueDate(tObj.joinDate, cyclesElapsed + 1);
 
-    // Total days in this current billing cycle
     const totalDaysInCycle = Math.round((currentCycleEndDate - currentCycleStartDate) / (1000 * 60 * 60 * 24));
-    // Days spent in this cycle up to exit date
     const daysSpentInCycle = Math.round((startOfExit - currentCycleStartDate) / (1000 * 60 * 60 * 24));
 
     const dailyRent = totalDaysInCycle > 0 ? (Number(tObj.rent || 0) / totalDaysInCycle) : 0;
     const proratedExpected = Math.round(dailyRent * daysSpentInCycle);
 
     const totalExpectedAllTime = fullCyclesExpected + proratedExpected;
-
-    // Total payments ever made by this tenant
     const totalPaidAllTime = state.rent
         .filter(r => r.tenantId === tObj.id)
         .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
@@ -1445,8 +1414,6 @@ const calculateProratedValues = () => {
         </div>
     `;
 };
-
-
 
 window.applyCheckoutAutoDues = (amount) => {
     dom.chkoutDues.value = amount;
@@ -1531,7 +1498,7 @@ const renderRent = () => {
                 <td><span class="badge bg-secondary">${r.mode}</span></td>
                 <td><code>${r.transactionNo || "N/A"}</code></td>
                 <td><span class="badge bg-success">${r.status || "Paid"}</span></td>
-               <td class="text-end pe-3">
+                <td class="text-end pe-3">
                     <button class="btn btn-sm btn-outline-primary me-1" onclick="printReceipt('${r.id}')" title="Print Receipt" aria-label="Print receipt for transaction ${r.id}"><i class="bi bi-printer-fill"></i></button>
                     <button class="btn btn-sm btn-outline-secondary me-1" onclick="editRentRecord('${r.id}')" title="Edit Record" aria-label="Edit rent record ${r.id}"><i class="bi bi-pencil-fill"></i></button>
                     <button class="btn btn-sm btn-outline-danger" onclick="deleteRentRecord('${r.id}')" title="Delete Record" aria-label="Delete rent record ${r.id}"><i class="bi bi-trash-fill"></i></button>
@@ -1590,14 +1557,31 @@ window.deleteRentRecord = (id) => {
     });
 };
 
-
-
-
 window.openRentModal = () => {
     dom.formRent.reset();
     dom.rentEditId.value = "";
     document.getElementById("modalRentHeader").innerText = "Rent Receipt Payment Ledger";
     syncTenantDropdowns();
+    instances.modalRent.show();
+};
+
+window.editRentRecord = (id) => {
+    const rentObj = state.rent.find(r => r.id === id);
+    if (!rentObj) return;
+    dom.formRent.reset();
+    syncTenantDropdowns();
+    
+    dom.rentEditId.value = rentObj.id;
+    if (dom.rentTenantId) dom.rentTenantId.value = rentObj.tenantId || "";
+    if (dom.rentMonth) dom.rentMonth.value = rentObj.month || "January";
+    if (dom.rentYear) dom.rentYear.value = rentObj.year || 2026;
+    if (dom.rentAmountPaid) dom.rentAmountPaid.value = rentObj.amountPaid || 0;
+    if (dom.rentDiscount) dom.rentDiscount.value = rentObj.discount || 0;
+    if (dom.rentMode) dom.rentMode.value = rentObj.mode || "Cash";
+    if (dom.rentTransNo) dom.rentTransNo.value = rentObj.transactionNo || "";
+    if (dom.rentRemarks) dom.rentRemarks.value = rentObj.remarks || "";
+    
+    document.getElementById("modalRentHeader").innerText = "Edit Rent Receipt Ledger Entry";
     instances.modalRent.show();
 };
 
@@ -1650,30 +1634,6 @@ dom.formRent.addEventListener("submit", async (e) => {
     showLoader(false);
 });
 
-
-
-window.editRentRecord = (id) => {
-    const rentObj = state.rent.find(r => r.id === id);
-    if (!rentObj) return;
-    dom.formRent.reset();
-    syncTenantDropdowns();
-    
-    dom.rentEditId.value = rentObj.id;
-    if (dom.rentTenantId) dom.rentTenantId.value = rentObj.tenantId || "";
-    if (dom.rentMonth) dom.rentMonth.value = rentObj.month || "January";
-    if (dom.rentYear) dom.rentYear.value = rentObj.year || 2026;
-    if (dom.rentAmountPaid) dom.rentAmountPaid.value = rentObj.amountPaid || 0;
-    if (dom.rentDiscount) dom.rentDiscount.value = rentObj.discount || 0;
-    if (dom.rentMode) dom.rentMode.value = rentObj.mode || "Cash";
-    if (dom.rentTransNo) dom.rentTransNo.value = rentObj.transactionNo || "";
-    if (dom.rentRemarks) dom.rentRemarks.value = rentObj.remarks || "";
-    
-    document.getElementById("modalRentHeader").innerText = "Edit Rent Receipt Ledger Entry";
-    instances.modalRent.show();
-};
-
-
-
 dom.filterRentMonth.addEventListener("change", () => {
     renderRent();
 });
@@ -1706,6 +1666,7 @@ window.openElecModal = () => {
     dom.calcBillTotal.innerText = "₹0.00";
     instances.modalElectricity.show();
 };
+
 dom.elecRoomId.addEventListener("change", (e) => {
     const roomId = e.target.value;
     if (!roomId) return;
@@ -1769,27 +1730,6 @@ dom.formElectricity.addEventListener("submit", async (e) => {
     showLoader(false);
 });
 
-
-window.editElecBill = (id) => {
-    const bill = state.electricity.find(e => e.id === id);
-    if (!bill) return;
-    dom.formElectricity.reset();
-    syncRoomDropdowns();
-    
-    dom.elecEditId.value = bill.id;
-    if (dom.elecRoomId) dom.elecRoomId.value = bill.roomId || "";
-    if (dom.elecMonth) dom.elecMonth.value = bill.month || "";
-    if (dom.elecRate) dom.elecRate.value = bill.rate || 8;
-    if (dom.elecPrevReading) dom.elecPrevReading.value = bill.prevReading || 0;
-    if (dom.elecCurrReading) dom.elecCurrReading.value = bill.currReading || 0;
-    
-    calculateElectricityValues();
-    document.getElementById("modalElectricityHeader").innerText = "Edit Electricity Billing & Reading Entry";
-    instances.modalElectricity.show();
-};
-
-
-
 const renderElectricity = () => {
     if (!dom.tableElectricityBody) return;
     const filterMonthVal = dom.filterElectricityMonth.value;
@@ -1809,7 +1749,7 @@ const renderElectricity = () => {
                 <td>${e.unitsConsumed} Units</td>
                 <td class="fw-bold text-danger">${formatCurrency(e.totalAmount)}</td>
                 <td><span class="badge bg-warning text-dark">${e.status}</span></td>
-               <td class="text-end pe-3">
+                <td class="text-end pe-3">
                     ${e.status !== 'Paid' ? `<button class="btn btn-sm btn-outline-success me-1" onclick="payElecBill('${e.id}')" aria-label="Mark utility bill ${e.id} as paid"><i class="bi bi-check-circle-fill"></i> Mark Paid</button>` : ''}
                     <button class="btn btn-sm btn-outline-secondary me-1" onclick="editElecBill('${e.id}')" title="Edit Bill" aria-label="Edit utility bill ${e.id}"><i class="bi bi-pencil-fill"></i></button>
                     <button class="btn btn-sm btn-outline-danger" onclick="deleteElecBill('${e.id}')" aria-label="Delete utility reading ${e.id}"><i class="bi bi-trash-fill"></i></button>
@@ -1817,6 +1757,24 @@ const renderElectricity = () => {
             </tr>
         `;
     }).join("") || `<tr><td colspan="8" class="text-center py-5 text-muted">No readings registered.</td></tr>`;
+};
+
+window.editElecBill = (id) => {
+    const bill = state.electricity.find(e => e.id === id);
+    if (!bill) return;
+    dom.formElectricity.reset();
+    syncRoomDropdowns();
+    
+    dom.elecEditId.value = bill.id;
+    if (dom.elecRoomId) dom.elecRoomId.value = bill.roomId || "";
+    if (dom.elecMonth) dom.elecMonth.value = bill.month || "";
+    if (dom.elecRate) dom.elecRate.value = bill.rate || 8;
+    if (dom.elecPrevReading) dom.elecPrevReading.value = bill.prevReading || 0;
+    if (dom.elecCurrReading) dom.elecCurrReading.value = bill.currReading || 0;
+    
+    calculateElectricityValues();
+    document.getElementById("modalElectricityHeader").innerText = "Edit Electricity Billing & Reading Entry";
+    instances.modalElectricity.show();
 };
 
 window.payElecBill = async (id) => {
@@ -1884,7 +1842,6 @@ const renderHistory = (qStr = "") => {
     if (!dom.tableHistoryBody) return;
     let records = [...state.history];
     
-    // DYNAMIC SUMMARY METRICS CALCULATOR
     const totalPastCount = records.length;
     const totalDamages = records.reduce((sum, r) => sum + Number(r.damageDeductions || 0), 0);
     const totalCleaning = records.reduce((sum, r) => sum + Number(r.cleaningDeductions || 0), 0);
@@ -2363,8 +2320,6 @@ function renderCumulativeDues() {
         }
 
         const totalExpected = cyclesElapsed * Number(t.rent || 0);
-        
-        // Sum of all payments recorded for this tenant across any calendar periods
         const totalPaid = state.rent
             .filter(r => r.tenantId === t.id)
             .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
@@ -2420,6 +2375,7 @@ function renderCumulativeDues() {
 
 window.collectTenantDues = (tenantId, amount) => {
     dom.formRent.reset();
+    dom.rentEditId.value = "";
     syncTenantDropdowns();
     
     if (dom.rentTenantId) {

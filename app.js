@@ -248,6 +248,19 @@ const formatCurrency = (val) => {
     return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 }).format(val);
 };
 
+const getDueDate = (joinDateStr, monthsToAdd) => {
+    const join = new Date(joinDateStr);
+    const day = join.getDate();
+    // Set to 1st of month first to prevent month-overflow rollovers
+    join.setDate(1);
+    join.setMonth(join.getMonth() + monthsToAdd);
+    // Determine target month's maximum days
+    const maxDays = new Date(join.getFullYear(), join.getMonth() + 1, 0).getDate();
+    join.setDate(Math.min(day, maxDays));
+    return join;
+};
+
+
 const switchView = (targetView) => {
     const views = document.querySelectorAll(".app-view");
     views.forEach(v => v.classList.add("d-none"));
@@ -381,13 +394,26 @@ const calculateDashboardStats = () => {
     });
 
     const today = new Date();
-    const currentMonthName = today.toLocaleString('default', { month: 'long' });
-    const currentYear = today.getFullYear();
+    const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
     let pendingRentCount = 0;
+    
     state.tenants.forEach(t => {
-        if (t.status === "Active") {
-            const hasPaid = state.rent.some(r => r.tenantId === t.id && r.month === currentMonthName && Number(r.year) === currentYear);
-            if (!hasPaid) {
+        if (t.status === "Active" && t.joinDate) {
+            let cyclesElapsed = 0;
+            while (true) {
+                const nextDueDate = getDueDate(t.joinDate, cyclesElapsed + 1);
+                if (nextDueDate <= todayNormalized) {
+                    cyclesElapsed++;
+                } else {
+                    break;
+                }
+            }
+            const expectedRentToDate = cyclesElapsed * Number(t.rent || 0);
+            const totalRentPaidToDate = state.rent
+                .filter(r => r.tenantId === t.id)
+                .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
+
+            if (expectedRentToDate > totalRentPaidToDate) {
                 pendingRentCount++;
             }
         }
@@ -435,12 +461,29 @@ const calculateDashboardStats = () => {
             }
 
             // Unpaid Current Month Rent Alerts
-            const paidThisMonth = state.rent.some(r => r.tenantId === t.id && r.month === currentMonthName && Number(r.year) === currentYear);
-            if (!paidThisMonth) {
+            // Unpaid Overdue Cycle Alerts
+            let cyclesElapsed = 0;
+            if (t.joinDate) {
+                while (true) {
+                    const nextDueDate = getDueDate(t.joinDate, cyclesElapsed + 1);
+                    if (nextDueDate <= todayNormalized) {
+                        cyclesElapsed++;
+                    } else {
+                        break;
+                    }
+                }
+            }
+            const expectedRentToDate = cyclesElapsed * Number(t.rent || 0);
+            const totalRentPaidToDate = state.rent
+                .filter(r => r.tenantId === t.id)
+                .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
+            const cycleDueAmt = expectedRentToDate - totalRentPaidToDate;
+
+            if (cycleDueAmt > 0) {
                 state.alerts.push({
                     type: "danger",
                     title: "Rent Overdue",
-                    description: `Tenant ${t.name} (${roomLabel}) has not paid rent for ${currentMonthName} ${currentYear}.`
+                    description: `Tenant ${t.name} (${roomLabel}) has overdue cycle balance of ${formatCurrency(cycleDueAmt)}.`
                 });
             }
 
@@ -801,44 +844,31 @@ window.viewTenantDetails = (id) => {
     const monthsOrder = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
     const currentMonthName = monthsOrder[currentMonth];
 
-    let totalExpected = 0;
-    let totalPaid = 0;
-    let monthsCount = 0;
-    let currentMonthExpectedRent = Number(t.rent || 0);
-    let currentMonthRentPaid = 0;
+    const today = new Date();
+    const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
+    let cyclesElapsed = 0;
     if (t.joinDate) {
-        const join = new Date(t.joinDate);
-        if (!isNaN(join.getTime())) {
-            let y = join.getFullYear();
-            let m = join.getMonth();
-
-            while (y < currentYear || (y === currentYear && m <= currentMonth)) {
-                monthsCount++;
-                const monthName = monthsOrder[m];
-                totalExpected += Number(t.rent || 0);
-
-                const paidThisMonth = state.rent
-                    .filter(r => r.tenantId === t.id && r.month === monthName && Number(r.year) === y)
-                    .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
-                
-                totalPaid += paidThisMonth;
-
-                if (y === currentYear && m === currentMonth) {
-                    currentMonthRentPaid = paidThisMonth;
-                }
-
-                m++;
-                if (m > 11) {
-                    m = 0;
-                    y++;
-                }
+        while (true) {
+            const nextDueDate = getDueDate(t.joinDate, cyclesElapsed + 1);
+            if (nextDueDate <= todayNormalized) {
+                cyclesElapsed++;
+            } else {
+                break;
             }
         }
     }
 
+    const totalExpected = cyclesElapsed * Number(t.rent || 0);
+    const totalPaid = state.rent
+        .filter(r => r.tenantId === t.id)
+        .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
+
     const cumulativeRentDue = Math.max(0, totalExpected - totalPaid);
-    const currentMonthRentDue = Math.max(0, currentMonthExpectedRent - currentMonthRentPaid);
+    const nextDue = t.joinDate ? getDueDate(t.joinDate, cyclesElapsed + 1) : null;
+    const nextDueStr = nextDue ? nextDue.toLocaleDateString() : "N/A";
+
+    
 
     const paymentsLog = state.rent.filter(r => r.tenantId === t.id)
         .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
@@ -859,16 +889,21 @@ window.viewTenantDetails = (id) => {
                 <p class="text-muted small mb-2"><i class="bi bi-hash"></i> Room Reference: ${room ? `Room ${room.number}` : 'Unassigned'}</p>
                 <span class="badge ${t.status === 'Active' ? 'bg-success' : 'bg-secondary'} px-3 py-1.5 fs-7 mb-3">${t.status}</span>
                 
-                <div class="bg-light p-3 rounded border text-start mt-2">
-                    <h5 class="h6 fw-bold text-dark border-bottom pb-2 mb-2">Finance Status Summary</h5>
+               <div class="bg-light p-3 rounded border text-start mt-2">
+                    <h5 class="h6 fw-bold text-dark border-bottom pb-2 mb-2">Cycle-Based Finance Summary</h5>
                     <div class="d-flex justify-content-between mb-2">
-                        <span class="small text-muted">Current Month Dues (${currentMonthName}):</span>
-                        <span class="small fw-bold ${currentMonthRentDue > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(currentMonthRentDue)}</span>
+                        <span class="small text-muted">Billed Cycles Elapsed:</span>
+                        <span class="small fw-bold text-dark">${cyclesElapsed} Cycle(s)</span>
+                    </div>
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="small text-muted">Next Cycle Due Date:</span>
+                        <span class="small fw-bold text-primary">${nextDueStr}</span>
                     </div>
                     <div class="d-flex justify-content-between mb-2">
                         <span class="small text-muted">Cumulative Rent Due:</span>
                         <span class="small fw-bold ${cumulativeRentDue > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(cumulativeRentDue)}</span>
                     </div>
+                    
                     <div class="d-flex justify-content-between mb-2">
                         <span class="small text-muted">Security Deposit:</span>
                         <span class="small fw-bold text-secondary">${formatCurrency(t.deposit || 0)}</span>
@@ -1309,46 +1344,57 @@ const calculateProratedValues = () => {
     const tObj = state.tenants.find(x => x.id === tenantId);
     if (!tObj) return;
     
-    const d = new Date(leaveDateVal);
-    if (isNaN(d.getTime())) return;
+    const exitDate = new Date(leaveDateVal);
+    if (isNaN(exitDate.getTime())) return;
     
-    const year = d.getFullYear();
-    const monthIndex = d.getMonth();
-    const monthsOrder = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    const monthName = monthsOrder[monthIndex];
-    
-    const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
-    const daysSpent = d.getDate();
-    const monthlyRent = Number(tObj.rent || 0);
-    const dailyRent = daysInMonth > 0 ? (monthlyRent / daysInMonth) : 0;
-    const proratedExpected = Math.round(dailyRent * daysSpent);
-    
-    const paidThisMonth = state.rent
-        .filter(r => r.tenantId === tObj.id && r.month === monthName && Number(r.year) === year)
-        .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
-        
-    const proratedRentDue = Math.max(0, proratedExpected - paidThisMonth);
-    
-    let previousExpected = 0;
-    let previousPaid = 0;
-    if (tObj.joinDate) {
-        const join = new Date(tObj.joinDate);
-        if (!isNaN(join.getTime())) {
-            let y = join.getFullYear();
-            let m = join.getMonth();
-            while (y < year || (y === year && m < monthIndex)) {
-                previousExpected += monthlyRent;
-                const paidMonthName = monthsOrder[m];
-                previousPaid += state.rent
-                    .filter(r => r.tenantId === tObj.id && r.month === paidMonthName && Number(r.year) === y)
-                    .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
-                m++;
-                if (m > 11) { m = 0; y++; }
-            }
+    const joinDate = new Date(tObj.joinDate);
+    if (isNaN(joinDate.getTime())) return;
+
+    // Normalize dates to exclude timestamps
+    const startOfExit = new Date(exitDate.getFullYear(), exitDate.getMonth(), exitDate.getDate());
+    const startOfJoin = new Date(joinDate.getFullYear(), joinDate.getMonth(), joinDate.getDate());
+
+    if (startOfExit < startOfJoin) {
+        const summaryDiv = dom.checkoutProRataSummary;
+        if (summaryDiv) summaryDiv.innerHTML = `<span class="text-danger small">Exit date cannot be before join date.</span>`;
+        return;
+    }
+
+    // Calculate full cycles elapsed prior to checkout date
+    let cyclesElapsed = 0;
+    while (true) {
+        const cycleEndDate = getDueDate(tObj.joinDate, cyclesElapsed + 1);
+        if (cycleEndDate <= startOfExit) {
+            cyclesElapsed++;
+        } else {
+            break;
         }
     }
-    const previousRentOutstanding = Math.max(0, previousExpected - previousPaid);
-    
+
+    // Compute expected rent for all fully completed cycles
+    const fullCyclesExpected = cyclesElapsed * Number(tObj.rent || 0);
+
+    // Compute proration for the remaining partial cycle
+    const currentCycleStartDate = getDueDate(tObj.joinDate, cyclesElapsed);
+    const currentCycleEndDate = getDueDate(tObj.joinDate, cyclesElapsed + 1);
+
+    // Total days in this current billing cycle
+    const totalDaysInCycle = Math.round((currentCycleEndDate - currentCycleStartDate) / (1000 * 60 * 60 * 24));
+    // Days spent in this cycle up to exit date
+    const daysSpentInCycle = Math.round((startOfExit - currentCycleStartDate) / (1000 * 60 * 60 * 24));
+
+    const dailyRent = totalDaysInCycle > 0 ? (Number(tObj.rent || 0) / totalDaysInCycle) : 0;
+    const proratedExpected = Math.round(dailyRent * daysSpentInCycle);
+
+    const totalExpectedAllTime = fullCyclesExpected + proratedExpected;
+
+    // Total payments ever made by this tenant
+    const totalPaidAllTime = state.rent
+        .filter(r => r.tenantId === tObj.id)
+        .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
+
+    const totalRentOutstanding = Math.max(0, totalExpectedAllTime - totalPaidAllTime);
+
     const electricityDues = state.electricity
         .filter(e => e.roomId === tObj.roomId && e.status === "Pending")
         .reduce((sum, e) => sum + Number(e.totalAmount || 0), 0);
@@ -1360,28 +1406,28 @@ const calculateProratedValues = () => {
         <h5 class="h6 fw-bold text-dark border-bottom pb-2 mb-2"><i class="bi bi-calculator"></i> Settlement Calculation Breakdown</h5>
         <div class="row g-2 small text-dark">
             <div class="col-md-6">
-                <span class="text-muted d-block">Days in checkout month (${monthName}):</span>
-                <strong>${daysSpent} / ${daysInMonth} Days</strong>
+                <span class="text-muted d-block">Full Billing Cycles:</span>
+                <strong>${cyclesElapsed} Cycle(s) (${formatCurrency(fullCyclesExpected)})</strong>
             </div>
             <div class="col-md-6">
-                <span class="text-muted d-block">Daily Rent rate (computed):</span>
-                <strong>${formatCurrency(dailyRent)} / day</strong>
+                <span class="text-muted d-block">Last Cycle Days:</span>
+                <strong>${daysSpentInCycle} / ${totalDaysInCycle} Days</strong>
             </div>
             <div class="col-md-6 border-top pt-2">
-                <span class="text-muted d-block">Prorated Final Month Rent:</span>
+                <span class="text-muted d-block">Prorated Cycle Rent:</span>
                 <strong>${formatCurrency(proratedExpected)}</strong>
             </div>
             <div class="col-md-6 border-top pt-2">
-                <span class="text-muted d-block">Paid this final month:</span>
-                <strong class="text-success">${formatCurrency(paidThisMonth)}</strong>
+                <span class="text-muted d-block">Total Expected Rent:</span>
+                <strong>${formatCurrency(totalExpectedAllTime)}</strong>
             </div>
             <div class="col-md-6 border-top pt-2">
-                <span class="text-muted d-block">Final Month Rent Due:</span>
-                <strong class="${proratedRentDue > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(proratedRentDue)}</strong>
+                <span class="text-muted d-block">Rent Payments Settled:</span>
+                <strong class="text-success">${formatCurrency(totalPaidAllTime)}</strong>
             </div>
             <div class="col-md-6 border-top pt-2">
-                <span class="text-muted d-block">Previous Months Unpaid Rent:</span>
-                <strong class="${previousRentOutstanding > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(previousRentOutstanding)}</strong>
+                <span class="text-muted d-block">Net Rent Outstanding:</span>
+                <strong class="${totalRentOutstanding > 0 ? 'text-danger' : 'text-success'}">${formatCurrency(totalRentOutstanding)}</strong>
             </div>
             <div class="col-md-6 border-top pt-2">
                 <span class="text-muted d-block">Unpaid Electricity Dues:</span>
@@ -1389,16 +1435,18 @@ const calculateProratedValues = () => {
             </div>
             <div class="col-md-6 border-top pt-2">
                 <span class="text-muted d-block">Total Auto-Calculated Dues:</span>
-                <h6 class="m-0 fw-bold text-danger">${formatCurrency(proratedRentDue + previousRentOutstanding + electricityDues)}</h6>
+                <h6 class="m-0 fw-bold text-danger">${formatCurrency(totalRentOutstanding + electricityDues)}</h6>
             </div>
         </div>
         <div class="mt-2 text-end">
-            <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2" style="font-size:11px;" onclick="applyCheckoutAutoDues(${proratedRentDue + previousRentOutstanding + electricityDues})">
+            <button type="button" class="btn btn-sm btn-outline-primary py-1 px-2" style="font-size:11px;" onclick="applyCheckoutAutoDues(${totalRentOutstanding + electricityDues})">
                 <i class="bi bi-box-arrow-in-down-left"></i> Apply to 'Other Unpaid Dues' field
             </button>
         </div>
     `;
 };
+
+
 
 window.applyCheckoutAutoDues = (amount) => {
     dom.chkoutDues.value = amount;
@@ -2264,11 +2312,8 @@ function renderCumulativeDues() {
     if (!dom.tableCumulativeDuesBody) return;
     
     const activeTenants = state.tenants.filter(t => t.status === "Active" || t.status === "Notice Period");
-    const monthsOrder = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-    
     const today = new Date();
-    const currentYear = today.getFullYear();
-    const currentMonth = today.getMonth();
+    const todayNormalized = new Date(today.getFullYear(), today.getMonth(), today.getDate());
 
     let overdueCount = 0;
 
@@ -2307,42 +2352,37 @@ function renderCumulativeDues() {
             `;
         }
 
-        const startYear = join.getFullYear();
-        const startMonth = join.getMonth();
-        
-        let totalExpected = 0;
-        let totalPaid = 0;
-        let monthsCount = 0;
-
-        let y = startYear;
-        let m = startMonth;
-
-        while (y < currentYear || (y === currentYear && m <= currentMonth)) {
-            monthsCount++;
-            const monthName = monthsOrder[m];
-            totalExpected += Number(t.rent || 0);
-
-            const paidThisMonth = state.rent
-                .filter(r => r.tenantId === t.id && r.month === monthName && Number(r.year) === y)
-                .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
-            
-            totalPaid += paidThisMonth;
-
-            m++;
-            if (m > 11) {
-                m = 0;
-                y++;
+        let cyclesElapsed = 0;
+        while (true) {
+            const nextDueDate = getDueDate(t.joinDate, cyclesElapsed + 1);
+            if (nextDueDate <= todayNormalized) {
+                cyclesElapsed++;
+            } else {
+                break;
             }
         }
+
+        const totalExpected = cyclesElapsed * Number(t.rent || 0);
+        
+        // Sum of all payments recorded for this tenant across any calendar periods
+        const totalPaid = state.rent
+            .filter(r => r.tenantId === t.id)
+            .reduce((sum, r) => sum + Number(r.amountPaid || 0), 0);
 
         const cumulativeDue = Math.max(0, totalExpected - totalPaid);
         if (cumulativeDue > 0) {
             overdueCount++;
         }
 
-        const joinMonthStr = join.toLocaleString('default', { month: 'short' });
-        const currMonthStr = today.toLocaleString('default', { month: 'short' });
-        const periodStr = `${joinMonthStr} ${startYear} – ${currMonthStr} ${currentYear} (${monthsCount} mos)`;
+        const nextDueDate = getDueDate(t.joinDate, cyclesElapsed + 1);
+        let periodStr = "";
+        if (cyclesElapsed === 0) {
+            periodStr = `No cycle due yet (Next due: ${nextDueDate.toLocaleDateString()})`;
+        } else {
+            const lastElapsedDate = getDueDate(t.joinDate, cyclesElapsed);
+            periodStr = `Up to ${lastElapsedDate.toLocaleDateString()} (${cyclesElapsed} cycle${cyclesElapsed > 1 ? 's' : ''})`;
+        }
+
         const dueClass = cumulativeDue > 0 ? "text-danger fw-bold" : "text-success fw-bold";
 
         return `

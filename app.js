@@ -36,6 +36,8 @@ const state = {
 
 // Centralized DOM Selector Cache
 const dom = {
+    rentEditId: document.getElementById("rent-edit-id"),
+    elecEditId: document.getElementById("elec-edit-id"),
     sidebar: document.getElementById("sidebar"),
     sidebarToggle: document.getElementById("sidebar-toggle"),
     themeToggler: document.getElementById("theme-toggler"),
@@ -1481,9 +1483,10 @@ const renderRent = () => {
                 <td><span class="badge bg-secondary">${r.mode}</span></td>
                 <td><code>${r.transactionNo || "N/A"}</code></td>
                 <td><span class="badge bg-success">${r.status || "Paid"}</span></td>
-                <td class="text-end pe-3">
-                    <button class="btn btn-sm btn-outline-primary me-1" onclick="printReceipt('${r.id}')" aria-label="Print receipt for transaction ${r.id}"><i class="bi bi-printer-fill"></i></button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRentRecord('${r.id}')" aria-label="Delete rent record ${r.id}"><i class="bi bi-trash-fill"></i></button>
+               <td class="text-end pe-3">
+                    <button class="btn btn-sm btn-outline-primary me-1" onclick="printReceipt('${r.id}')" title="Print Receipt" aria-label="Print receipt for transaction ${r.id}"><i class="bi bi-printer-fill"></i></button>
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="editRentRecord('${r.id}')" title="Edit Record" aria-label="Edit rent record ${r.id}"><i class="bi bi-pencil-fill"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRentRecord('${r.id}')" title="Delete Record" aria-label="Delete rent record ${r.id}"><i class="bi bi-trash-fill"></i></button>
                 </td>
             </tr>
         `;
@@ -1539,14 +1542,20 @@ window.deleteRentRecord = (id) => {
     });
 };
 
+
+
+
 window.openRentModal = () => {
     dom.formRent.reset();
+    dom.rentEditId.value = "";
+    document.getElementById("modalRentHeader").innerText = "Rent Receipt Payment Ledger";
     syncTenantDropdowns();
     instances.modalRent.show();
 };
 
 dom.formRent.addEventListener("submit", async (e) => {
     e.preventDefault();
+    const editId = dom.rentEditId.value;
     const tId = dom.rentTenantId.value;
     const amt = Number(dom.rentAmountPaid.value || 0);
     const month = dom.rentMonth.value;
@@ -1570,21 +1579,52 @@ dom.formRent.addEventListener("submit", async (e) => {
         discount: disc,
         mode,
         transactionNo: tx,
-        status: "Paid",
-        remarks: notes,
-        timestamp: new Date().toISOString()
+        remarks: notes
     };
+    
     showLoader(true);
     try {
-        await addDoc(collection(db, "rent"), payload);
-        showToast(`Rent payment recorded for tenant: ${tObj.name}.`);
-        logActivity("REVENUE", `Collected ₹${amt} from ${tObj.name}.`);
+        if (editId) {
+            await updateDoc(doc(db, "rent", editId), payload);
+            showToast(`Rent payment updated for tenant: ${tObj.name}.`);
+            logActivity("UPDATE", `Updated rent payment for ${tObj.name}. New amount: ₹${amt}`);
+        } else {
+            payload.status = "Paid";
+            payload.timestamp = new Date().toISOString();
+            await addDoc(collection(db, "rent"), payload);
+            showToast(`Rent payment recorded for tenant: ${tObj.name}.`);
+            logActivity("REVENUE", `Collected ₹${amt} from ${tObj.name}.`);
+        }
         instances.modalRent.hide();
     } catch (err) {
         showToast(err.message, "danger");
     }
     showLoader(false);
 });
+
+
+
+window.editRentRecord = (id) => {
+    const rentObj = state.rent.find(r => r.id === id);
+    if (!rentObj) return;
+    dom.formRent.reset();
+    syncTenantDropdowns();
+    
+    dom.rentEditId.value = rentObj.id;
+    if (dom.rentTenantId) dom.rentTenantId.value = rentObj.tenantId || "";
+    if (dom.rentMonth) dom.rentMonth.value = rentObj.month || "January";
+    if (dom.rentYear) dom.rentYear.value = rentObj.year || 2026;
+    if (dom.rentAmountPaid) dom.rentAmountPaid.value = rentObj.amountPaid || 0;
+    if (dom.rentDiscount) dom.rentDiscount.value = rentObj.discount || 0;
+    if (dom.rentMode) dom.rentMode.value = rentObj.mode || "Cash";
+    if (dom.rentTransNo) dom.rentTransNo.value = rentObj.transactionNo || "";
+    if (dom.rentRemarks) dom.rentRemarks.value = rentObj.remarks || "";
+    
+    document.getElementById("modalRentHeader").innerText = "Edit Rent Receipt Ledger Entry";
+    instances.modalRent.show();
+};
+
+
 
 dom.filterRentMonth.addEventListener("change", () => {
     renderRent();
@@ -1611,12 +1651,13 @@ dom.elecRate.addEventListener("input", calculateElectricityValues);
 
 window.openElecModal = () => {
     dom.formElectricity.reset();
+    dom.elecEditId.value = "";
+    document.getElementById("modalElectricityHeader").innerText = "Electricity Billing & Reading Entry";
     syncRoomDropdowns();
     dom.calcUnitsConsumed.innerText = "0";
     dom.calcBillTotal.innerText = "₹0.00";
     instances.modalElectricity.show();
 };
-
 dom.elecRoomId.addEventListener("change", (e) => {
     const roomId = e.target.value;
     if (!roomId) return;
@@ -1629,6 +1670,7 @@ dom.elecRoomId.addEventListener("change", (e) => {
 
 dom.formElectricity.addEventListener("submit", async (e) => {
     e.preventDefault();
+    const editId = dom.elecEditId.value;
     const rId = dom.elecRoomId.value;
     const billingMonth = dom.elecMonth.value;
     const rate = Number(dom.elecRate.value || 8);
@@ -1647,26 +1689,58 @@ dom.formElectricity.addEventListener("submit", async (e) => {
         currReading: curr,
         unitsConsumed: consumed,
         rate,
-        totalAmount: totalCost,
-        status: "Pending",
-        timestamp: new Date().toISOString()
+        totalAmount: totalCost
     };
+    
     showLoader(true);
     try {
         const batchObj = writeBatch(db);
-        const elecRef = doc(collection(db, "electricity"));
-        batchObj.set(elecRef, payload);
-        const roomRef = doc(db, "rooms", rId);
-        batchObj.update(roomRef, { elecMeter: curr.toString() });
-        await batchObj.commit();
-        showToast("Electricity bill generated and logged.");
-        logActivity("BILLING", `Logged electricity for Room.`);
+        if (editId) {
+            const elecRef = doc(db, "electricity", editId);
+            batchObj.update(elecRef, payload);
+            const roomRef = doc(db, "rooms", rId);
+            batchObj.update(roomRef, { elecMeter: curr.toString() });
+            await batchObj.commit();
+            showToast("Electricity bill successfully updated.");
+            logActivity("UPDATE", `Updated electricity reading for Room. New consumption: ${consumed} units.`);
+        } else {
+            payload.status = "Pending";
+            payload.timestamp = new Date().toISOString();
+            const elecRef = doc(collection(db, "electricity"));
+            batchObj.set(elecRef, payload);
+            const roomRef = doc(db, "rooms", rId);
+            batchObj.update(roomRef, { elecMeter: curr.toString() });
+            await batchObj.commit();
+            showToast("Electricity bill generated and logged.");
+            logActivity("BILLING", `Logged electricity for Room.`);
+        }
         instances.modalElectricity.hide();
     } catch (err) {
         showToast(err.message, "danger");
     }
     showLoader(false);
 });
+
+
+window.editElecBill = (id) => {
+    const bill = state.electricity.find(e => e.id === id);
+    if (!bill) return;
+    dom.formElectricity.reset();
+    syncRoomDropdowns();
+    
+    dom.elecEditId.value = bill.id;
+    if (dom.elecRoomId) dom.elecRoomId.value = bill.roomId || "";
+    if (dom.elecMonth) dom.elecMonth.value = bill.month || "";
+    if (dom.elecRate) dom.elecRate.value = bill.rate || 8;
+    if (dom.elecPrevReading) dom.elecPrevReading.value = bill.prevReading || 0;
+    if (dom.elecCurrReading) dom.elecCurrReading.value = bill.currReading || 0;
+    
+    calculateElectricityValues();
+    document.getElementById("modalElectricityHeader").innerText = "Edit Electricity Billing & Reading Entry";
+    instances.modalElectricity.show();
+};
+
+
 
 const renderElectricity = () => {
     if (!dom.tableElectricityBody) return;
@@ -1687,8 +1761,9 @@ const renderElectricity = () => {
                 <td>${e.unitsConsumed} Units</td>
                 <td class="fw-bold text-danger">${formatCurrency(e.totalAmount)}</td>
                 <td><span class="badge bg-warning text-dark">${e.status}</span></td>
-                <td class="text-end pe-3">
-                    <button class="btn btn-sm btn-outline-success me-1" onclick="payElecBill('${e.id}')" aria-label="Mark utility bill ${e.id} as paid"><i class="bi bi-check-circle-fill"></i> Mark Paid</button>
+               <td class="text-end pe-3">
+                    ${e.status !== 'Paid' ? `<button class="btn btn-sm btn-outline-success me-1" onclick="payElecBill('${e.id}')" aria-label="Mark utility bill ${e.id} as paid"><i class="bi bi-check-circle-fill"></i> Mark Paid</button>` : ''}
+                    <button class="btn btn-sm btn-outline-secondary me-1" onclick="editElecBill('${e.id}')" title="Edit Bill" aria-label="Edit utility bill ${e.id}"><i class="bi bi-pencil-fill"></i></button>
                     <button class="btn btn-sm btn-outline-danger" onclick="deleteElecBill('${e.id}')" aria-label="Delete utility reading ${e.id}"><i class="bi bi-trash-fill"></i></button>
                 </td>
             </tr>
